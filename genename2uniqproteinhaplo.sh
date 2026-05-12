@@ -1,5 +1,19 @@
 #!/bin/bash
 
+# tools required:
+#% samtools --version
+#samtools 1.23.1
+#% bcftools --version
+#bcftools 1.23.1
+#% CrossMap --version
+#CrossMap 0.7.0
+#% gffread --version
+#0.12.9
+#% wget --version
+#GNU Wget 1.25.0 built on darwin24.1.0.
+#% zgrep --version
+#zgrep (BSD grep, GNU compatible) 2.6.0-FreeBSD
+
 [ -z "$1" ] && { echo "Missing argument: gene name"; exit 1; }
 
 GENE=$1
@@ -138,25 +152,30 @@ while read -r SAMPLE; do
     [ -z "$SAMPLE" ] && continue # skip empty lines
     for H in 1 2; do
         PREFIX="${GENESAMPLESDIR}/${SAMPLE}.h${H}"
-        if [ -s "${PREFIX}.fa" ]; then
-            echo "File ${PREFIX}.fa exists and not empty, skipping ${SAMPLE} h${H}..."
+        if [[ -s "${PREFIX}.fa" && -s "${PREFIX}.chain" ]]; then
+            echo "File ${PREFIX}.fa and ${PREFIX}.chain exists and not empty, skipping ${SAMPLE} h${H}..."
             continue
         fi
         echo "Creating consensus and chain file for sample=${SAMPLE}, haplotype=${H}..."
         # create consensus for this sample/haplotype for region, with filter in place
+        # remove <INS>, <INS:ME:LINE1>, <INS:SVA>, <INS:ME:ALU>, etc because they cannot be processed
 		bcftools consensus \
 			-f "${GENEREFFA}" \
 			-s "$SAMPLE" \
 			-H "$H" \
-			-e 'ALT~"<INS>"' \
+      -e 'ALT~"^<INS" || ALT=="<DUP>"' \
 			--regions-overlap 1 \
 			--chain "${PREFIX}.chain" \
 			"${DATADIR}/${THGENSAMPLES}" \
 		> "${PREFIX}.fa"
 		if [ ! -s "${PREFIX}.fa" ]; then
-            echo "File ${PREFIX}.fa empty for ${SAMPLE} h${H}."
-            exit 1
-        fi
+        echo "File ${PREFIX}.fa empty for ${SAMPLE} h${H}."
+        exit 1
+    fi
+    if [ ! -s "${PREFIX}.chain" ]; then
+        echo "File ${PREFIX}.chain empty for ${SAMPLE} h${H}."
+        exit 1
+    fi
     done
 done < "${DATADIR}/${SAMPLENAMES}"
 
@@ -185,9 +204,15 @@ while read -r SAMPLE; do
             continue
         fi
         echo "Creating lifted GFF for sample=${SAMPLE}, haplotype=${H}..."
+        echo "cmd used: CrossMap gff ${PREFIX}.chain ${GENEDIR}/${GRCh38MANEGFF} ${LIFTEDMANE}"
         CrossMap gff "${PREFIX}.chain" "${GENEDIR}/${GRCh38MANEGFF}" "${LIFTEDMANE}"
+        if [[ ! -s "${LIFTEDMANE}" ]]; then
+            echo "Error: File ${LIFTEDMANE} not found or empty."
+            exit 1
+        fi
     done
 done < "${DATADIR}/${SAMPLENAMES}"
+
 
 # fix coordinates
 while read -r SAMPLE; do
@@ -207,16 +232,27 @@ while read -r SAMPLE; do
         fi
         echo "Creating local lifted GFF with coordinate fix for sample=${SAMPLE}, haplotype=${H}"
         SEQNAME=$(cut -f1 "${PREFIX}.fa.fai")
-		awk -v seq="$SEQNAME" -v start="$START" 'BEGIN{FS=OFS="\t"}
-  			/^#/ {print; next}
-			{
-				$1 = seq
-				$4 = $4 - start + 1
-				$5 = $5 - start + 1
-				print
-			}
-			' "${LIFTEDMANE}" \
-		> "${LIFTEDLOCALMANE}"
+        awk -v seq="$SEQNAME" -v start="$START" '
+        BEGIN {
+            FS = OFS = "\t"
+        }
+
+        /^#/ {
+            print
+            next
+        }
+
+        {
+            $1 = seq
+            $4 = $4 - start + 1
+            $5 = $5 - start + 1
+            print
+        }
+        ' "${LIFTEDMANE}" > "${LIFTEDLOCALMANE}"
+        if [[ ! -s "${LIFTEDLOCALMANE}" ]]; then
+            echo "Error: File ${LIFTEDLOCALMANE} not found or empty."
+            exit 1
+        fi
     done
 done < "${DATADIR}/${SAMPLENAMES}"
 
