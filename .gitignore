@@ -3,3 +3,9 @@
 
 # Mac
 .DS_Store
+
+# Data folder (created and populated automatically)
+data
+
+# Tmp folder
+tmp
