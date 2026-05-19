@@ -7,9 +7,6 @@ GENE=$1
 DATADIR=data
 TMPDIR=tmp
 GENEDIR="${TMPDIR}/${GENE}"
-mkdir -p "${DATADIR}"
-mkdir -p "${TMPDIR}"
-mkdir -p "${GENEDIR}"
 
 CLINVARVCFGZ=clinvar_20260503.vcf.gz
 
@@ -79,8 +76,6 @@ if [[ ! -s "${CLINVARGENE}.local.vcf" ]]; then
     exit 1
 fi
 
-
-
 if [ ! -s  "${CLINVARGENE}.local.vcf.gz" ]; then
   echo "Creating ${CLINVARGENE}.local.vcf.gz..."
   bgzip -c "${CLINVARGENE}.local.vcf" > "${CLINVARGENE}.local.vcf.gz"
@@ -93,17 +88,4 @@ if [[ ! -s "${CLINVARGENE}.local.vcf.gz" ]]; then
     exit 1
 fi
 
-exit 0
-
-# create consensus based on previously extracted samples (separate script?)
-
-bcftools consensus \
-    -f tmp/MEFV/samples/HG00620.h1.fa \
-    tmp/MEFV/ClinVarPathogenic.vcf.gz \
-    > CVtest_MEFV.HG00620.h1.fa
-
-gffread lifted.local.gff \
-    -g MEFV.HG00620.h1.clinvar449657.fa \
-    -x tmp.cds.fa \
-    -y tmp.protein.fa \
-    -S
+echo "...all done"
