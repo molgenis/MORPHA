@@ -5,6 +5,8 @@
 
 GENE=$1
 
+echo "Starting script with gene name = ${GENE}"
+
 DATADIR=data
 TMPDIR=tmp
 GENEDIR="${TMPDIR}/${GENE}"
@@ -12,15 +14,8 @@ SAMPLENAMES="1kGP_sample_names.txt"
 CLINVARGENE="${GENEDIR}/ClinVarPathogenic"
 CLINVARGENELOCAL="${CLINVARGENE}.local.vcf.gz"
 GENESAMPLESHAPLODIR="${GENEDIR}/samples"
-GENESAMPLESPATHODIR="${GENEDIR}/samples_wpatho"
+GENESAMPLESPATHODIR="${GENEDIR}/samples_patho"
 mkdir -p "${GENESAMPLESPATHODIR}"
-
-echo "Starting script with gene name = ${GENE}"
-
-
-# create consensus based on previously extracted samples (separate script?)
-
-
 
 bcftools query -f '%CHROM:%POS:%ALT\n' "$CLINVARGENELOCAL" | while read -r variant; do
 
@@ -28,108 +23,136 @@ bcftools query -f '%CHROM:%POS:%ALT\n' "$CLINVARGENELOCAL" | while read -r varia
     variant="chr16:1379:TAC"
 
     # Isolate the position, chromosome and alternative allele
+    # NOTE: we assume 1 alt per line, check if this is really true!!
     CHROM=$(echo "$variant" | cut -d':' -f1)
     POS=$(echo "$variant" | cut -d':' -f2)
     ALT=$(echo "$variant" | cut -d':' -f3)
-
-    # Create a unique file suffix including the ALT base to prevent overwriting
     CHR_POS_ALT="${CHROM}_${POS}_${ALT}"
+
     echo "Processing variant at $CHROM:$POS with ALT allele $ALT..."
 
     # Make a temporary single-variant VCF on the fly plus index
-    SINGLE_VAR_TMP_VCF="${GENEDIR}/tmp_vcf_for_${CHR_POS_ALT}.vcf.gz"
-    bcftools view -O z -i "POS==${POS} && ALT=='${ALT}'" "${CLINVARGENELOCAL}" > "${SINGLE_VAR_TMP_VCF}"
-    bcftools index "${SINGLE_VAR_TMP_VCF}"
+    SINGLE_VAR_TMP_VCF="${GENEDIR}/tmp_singlevar_${CHR_POS_ALT}.vcf.gz"
+    if [ ! -s "${SINGLE_VAR_TMP_VCF}" ]; then
+      echo "Creating ${SINGLE_VAR_TMP_VCF}..."
+      bcftools view -O z -i "POS==${POS} && ALT=='${ALT}'" "${CLINVARGENELOCAL}" > "${SINGLE_VAR_TMP_VCF}"
+      bcftools index "${SINGLE_VAR_TMP_VCF}"
+    else
+      echo "Skipping creation of ${SINGLE_VAR_TMP_VCF}..."
+    fi
     if [ ! -s "${SINGLE_VAR_TMP_VCF}" ]; then
       echo "File ${SINGLE_VAR_TMP_VCF} missing or empty."
       exit 1
     fi
-    echo "Single-variant VCF created at ${SINGLE_VAR_TMP_VCF}."
 
     # now loop over all samples
     while read -r SAMPLE; do
         [ -z "$SAMPLE" ] && continue # skip empty lines
         for H in 1 2; do
+
+            echo "Going to work on sample: ${SAMPLE}.h${H}"
             PREFIX_HAP="${GENESAMPLESHAPLODIR}/${SAMPLE}.h${H}"
             PREFIX_PTH="${GENESAMPLESPATHODIR}/${SAMPLE}.h${H}"
+            ORIGINALSAMPLEFA="${PREFIX_HAP}.fa"
 
-            echo "Applying to sample: ${PREFIX_HAP}"
-            SAMPLEFA="${PREFIX_HAP}.fa"
-            if [ ! -s "${SAMPLEFA}" ]; then
-              echo "File ${SAMPLEFA} missing or empty for ${SAMPLE} h${H}."
+            if [ ! -s "${ORIGINALSAMPLEFA}" ]; then
+              echo "File ${ORIGINALSAMPLEFA} missing or empty for ${SAMPLE} h${H}."
               exit 1
             fi
 
             # Temporarily simplify your FASTA header so it says ">chr16" instead of ">chr16:3242..."
             # to enable bcftools consensus matching of VCF and FASTA
-            SAMPLEFAHEADER=$(grep ">" "${SAMPLEFA}" | head -n 1)
-            echo "Extracted original FASTA header: ${SAMPLEFAHEADER}"
-            sed "s/>.*/>${CHROM}/" "${SAMPLEFA}" > "${PREFIX_PTH}.renameheader.fa"
-            if [ ! -s "${PREFIX_PTH}.renameheader.fa" ]; then
-              echo "File ${PREFIX_PTH}.renameheader.fa missing or empty for ${SAMPLE} h${H}."
+            ORIGINALSAMPLEFAHEADER=$(grep ">" "${ORIGINALSAMPLEFA}" | head -n 1)
+            echo "Extracted original FASTA header: ${ORIGINALSAMPLEFAHEADER}"
+            RENAMEDHEADERSAMPLEFA="${PREFIX_PTH}.hdr.fa"
+            if [ ! -s "${RENAMEDHEADERSAMPLEFA}" ]; then
+              echo "Creating ${RENAMEDHEADERSAMPLEFA}..."
+              #sed "s/>.*/>${CHROM}/" "${ORIGINALSAMPLEFAHEADER}" > "${RENAMEDHEADERSAMPLEFA}"
+              sed "1s/>.*/>${CHROM}/" "${ORIGINALSAMPLEFA}" > "${RENAMEDHEADERSAMPLEFA}"
+            else
+              echo "Skipping creation of ${RENAMEDHEADERSAMPLEFA}..."
+            fi
+            if [ ! -s "${RENAMEDHEADERSAMPLEFA}" ]; then
+              echo "File ${RENAMEDHEADERSAMPLEFA} missing or empty for ${SAMPLE} h${H}."
               exit 1
             fi
-            echo "Created temporary header rename FASTA at ${PREFIX_PTH}.renameheader.fa"
 
             # 4. Run consensus
-            bcftools consensus \
-                -f "${PREFIX_PTH}.renameheader.fa" \
-                -c "${PREFIX_PTH}.${CHR_POS_ALT}.chain" \
-                "$SINGLE_VAR_TMP_VCF" \
-                > "${PREFIX_PTH}.${CHR_POS_ALT}.fa"
-            if [ ! -s "${PREFIX_PTH}.${CHR_POS_ALT}.fa" ]; then
-              echo "File ${PREFIX_PTH}.${CHR_POS_ALT}.fa missing or empty for ${SAMPLE} h${H}."
-              exit 1
-            fi
-            echo "Created FASTA file for ${SAMPLE} h${H} at ${PREFIX_PTH}.${CHR_POS_ALT}.fa"
-            if [ ! -s "${PREFIX_PTH}.${CHR_POS_ALT}.chain" ]; then
-              echo "File ${PREFIX_PTH}.${CHR_POS_ALT}.chain missing or empty for ${SAMPLE} h${H}."
-              exit 1
-            fi
-            echo "Created chain file for ${SAMPLE} h${H} at ${PREFIX_PTH}.${CHR_POS_ALT}.chain"
+            SAMPLEPATHCHAIN="${PREFIX_PTH}.${CHR_POS_ALT}.chain"
+            SAMPLEPATHFA="${PREFIX_PTH}.${CHR_POS_ALT}.fa"
 
+            if [[ ! -s "${SAMPLEPATHCHAIN}" || ! -s "${SAMPLEPATHFA}" ]]; then
+                echo "Creating ${SAMPLEPATHCHAIN} and ${SAMPLEPATHFA} sequence consensus..."
+                bcftools consensus \
+                    -f "${RENAMEDHEADERSAMPLEFA}" \
+                    -c "${SAMPLEPATHCHAIN}" \
+                    "${SINGLE_VAR_TMP_VCF}" \
+                    > "${SAMPLEPATHFA}"
+            else
+              echo "${SAMPLEPATHCHAIN} and ${SAMPLEPATHFA} present, skipping consensus..."
+            fi
+            if [[ ! -s "${SAMPLEPATHCHAIN}" || ! -s "${SAMPLEPATHFA}" ]]; then
+               echo "${SAMPLEPATHCHAIN} and/or ${SAMPLEPATHFA} are missing."
+               exit 1
+            fi
 
             # 2. FIX THE HEADER: Replace ">chr16" back with the original coordinate header
             # '1s/.*/.../' tells sed to only modify the first line of the file
-            sed -i "" "1s/.*/${SAMPLEFAHEADER}/" "${PREFIX_PTH}.${CHR_POS_ALT}.fa"
-            echo "Restored header in ${PREFIX_PTH}.${CHR_POS_ALT}.fa"
+            sed -i "" "1s/.*/${ORIGINALSAMPLEFAHEADER}/" "${SAMPLEPATHFA}"
+            echo "Restored original FA header in ${SAMPLEPATHFA}"
 
             # 5. Clean up temporary files
             #rm "$tmp_vcf" "${tmp_vcf}.csi" tmp_temp_ref.fa
-
 
             HAPLIFTEDSAMPLEGFF="${PREFIX_HAP}.lifted.local.MANE.GRCh38.v1.3.ensembl_genomic.gff"
             CHROMRENAME_HAPLIFTEDSAMPLEGFF="${PREFIX_PTH}.lifted.local.chromrename.MANE.GRCh38.v1.3.ensembl_genomic.gff"
 
             if [ ! -s "${HAPLIFTEDSAMPLEGFF}" ]; then
-              echo "File ${HAPLIFTEDSAMPLEGFF}or empty for ${SAMPLE} h${H}."
+              echo "File ${HAPLIFTEDSAMPLEGFF} missing or empty for ${SAMPLE} h${H}."
               exit 1
             fi
             # create temporary GFF where the chromosome name column is simplified to match the chain file (changes "chr16:3242027-3256633" to "chr16")
-            awk -F'\t' -v chrom="$CHROM" 'BEGIN{OFS="\t"} {!/^#/ && $1=chrom; print}' \
-                "${HAPLIFTEDSAMPLEGFF}" \
-                > "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}"
+            if [ ! -s "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}" ]; then
+              echo "Creating ${CHROMRENAME_HAPLIFTEDSAMPLEGFF}..."
+              awk -F'\t' -v chrom="$CHROM" 'BEGIN{OFS="\t"} {!/^#/ && $1=chrom; print}' \
+                  "${HAPLIFTEDSAMPLEGFF}" \
+                  > "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}"
+            else
+              echo "Skipping creation of ${CHROMRENAME_HAPLIFTEDSAMPLEGFF}..."
+            fi
             if [ ! -s "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}" ]; then
               echo "File ${CHROMRENAME_HAPLIFTEDSAMPLEGFF} missing or empty for ${SAMPLE} h${H}."
               exit 1
             fi
-            echo "Create temporary GFF with chromosome renamed to ${CHROM}"
-            # ALSO RENAME THE FA HEADER...
-            sed '1s/>.*/>chr16/' "${PREFIX_PTH}.${CHR_POS_ALT}.fa" > "${PREFIX_PTH}.${CHR_POS_ALT}.renamed.fa"
+
+
+            # also rename from the sample patho FA file...
+            CHROMRENAME_SAMPLEPATHFA="${SAMPLEPATHFA}.chromrename.fa"
+            if [ ! -s "${CHROMRENAME_SAMPLEPATHFA}" ]; then
+               echo "Creating renamed chrom sample patho FA file ${CHROMRENAME_SAMPLEPATHFA}..."
+               sed "1s/>.*/>${CHROM}/" "${SAMPLEPATHFA}" > "${CHROMRENAME_SAMPLEPATHFA}"
+            else
+              echo "Skipping creation of ${CHROMRENAME_SAMPLEPATHFA}..."
+            fi
+            if [ ! -s "${CHROMRENAME_SAMPLEPATHFA}" ]; then
+              echo "File ${CHROMRENAME_SAMPLEPATHFA} missing or empty for ${SAMPLE} h${H}."
+              exit 1
+            fi
 
             # then perform liftover to pathogenic variant coordinates
             PATHOLIFTEDSAMPLEGFF="${PREFIX_PTH}.patholifted.local.MANE.GRCh38.v1.3.ensembl_genomic.gff"
-            echo "Running CrossMap: CrossMap gff ${PREFIX_PTH}.${CHR_POS_ALT}.chain ${CHROMRENAME_HAPLIFTEDSAMPLEGFF} ${PATHOLIFTEDSAMPLEGFF}"
+            #echo "Running CrossMap: CrossMap gff ${SAMPLEPATHCHAIN} ${CHROMRENAME_HAPLIFTEDSAMPLEGFF} ${PATHOLIFTEDSAMPLEGFF}"
             CrossMap gff \
-              "${PREFIX_PTH}.${CHR_POS_ALT}.chain" \
+              "${SAMPLEPATHCHAIN}" \
               "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}" \
               "${PATHOLIFTEDSAMPLEGFF}"
 
             # translate to CDS and protein:
             echo "Now translating to protein"
-            echo "gffread ${PATHOLIFTEDSAMPLEGFF} -g ${PREFIX_PTH}.${CHR_POS_ALT}.renamed.fa -x ${PREFIX_PTH}.${CHR_POS_ALT}.cds.fa -y ${PREFIX_PTH}.${CHR_POS_ALT}.protein.fa -S"
-            gffread "${PATHOLIFTEDSAMPLEGFF}" -g "${PREFIX_PTH}.${CHR_POS_ALT}.renamed.fa" -x "${PREFIX_PTH}.${CHR_POS_ALT}.cds.fa" -y "${PREFIX_PTH}.${CHR_POS_ALT}.protein.fa" -S
-
+            SAMPLEPATH_CDS="${PREFIX_PTH}.${CHR_POS_ALT}.cds.fa"
+            SAMPLEPATH_PROT="${PREFIX_PTH}.${CHR_POS_ALT}.protein.fa"
+            #echo "gffread ${PATHOLIFTEDSAMPLEGFF} -g ${PREFIX_PTH}.${CHR_POS_ALT}.renamed.fa -x ${PREFIX_PTH}.${CHR_POS_ALT}.cds.fa -y ${PREFIX_PTH}.${CHR_POS_ALT}.protein.fa -S"
+            gffread "${PATHOLIFTEDSAMPLEGFF}" -g "${CHROMRENAME_SAMPLEPATHFA}" -x "${SAMPLEPATH_CDS}" -y "${SAMPLEPATH_PROT}" -S
 
 
         done
