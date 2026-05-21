@@ -20,7 +20,7 @@ mkdir -p "${GENESAMPLESPATHODIR}"
 bcftools query -f '%CHROM:%POS:%ALT\n' "$CLINVARGENELOCAL" | while read -r variant; do
 
     # DEBUG
-    variant="chr16:1379:TAC"
+    #variant="chr16:1379:TAC"
 
     # Isolate the position, chromosome and alternative allele
     # NOTE: we assume 1 alt per line, check if this is really true!!
@@ -53,6 +53,14 @@ bcftools query -f '%CHROM:%POS:%ALT\n' "$CLINVARGENELOCAL" | while read -r varia
             echo "Going to work on sample: ${SAMPLE}.h${H}"
             PREFIX_HAP="${GENESAMPLESHAPLODIR}/${SAMPLE}.h${H}"
             PREFIX_PTH="${GENESAMPLESPATHODIR}/${SAMPLE}.h${H}"
+
+            # protein file output location, can already check and skip if present!
+            SAMPLEPATH_PROT="${PREFIX_PTH}.${CHR_POS_ALT}.protein.fa"
+            if [ -s "${SAMPLEPATH_PROT}" ]; then
+              echo "File ${SAMPLEPATH_PROT} already present for ${SAMPLE} h${H}, skipping to next..."
+              continue
+            fi
+
             ORIGINALSAMPLEFA="${PREFIX_HAP}.fa"
 
             if [ ! -s "${ORIGINALSAMPLEFA}" ]; then
@@ -150,14 +158,41 @@ bcftools query -f '%CHROM:%POS:%ALT\n' "$CLINVARGENELOCAL" | while read -r varia
             # translate to CDS and protein:
             echo "Now translating to protein"
             SAMPLEPATH_CDS="${PREFIX_PTH}.${CHR_POS_ALT}.cds.fa"
-            SAMPLEPATH_PROT="${PREFIX_PTH}.${CHR_POS_ALT}.protein.fa"
             #echo "gffread ${PATHOLIFTEDSAMPLEGFF} -g ${PREFIX_PTH}.${CHR_POS_ALT}.renamed.fa -x ${PREFIX_PTH}.${CHR_POS_ALT}.cds.fa -y ${PREFIX_PTH}.${CHR_POS_ALT}.protein.fa -S"
             gffread "${PATHOLIFTEDSAMPLEGFF}" -g "${CHROMRENAME_SAMPLEPATHFA}" -x "${SAMPLEPATH_CDS}" -y "${SAMPLEPATH_PROT}" -S
 
+            # need to clean up since we process so many samples x haplotypes x mutations, only keep protein file
+            if [ -n "${SAMPLEPATH_CDS}" ] && [ -f "${SAMPLEPATH_CDS}" ]; then
+                rm "${SAMPLEPATH_CDS}"
+            fi
+            if [ -n "${SAMPLEPATHCHAIN}" ] && [ -f "${SAMPLEPATHCHAIN}" ]; then
+                rm "${SAMPLEPATHCHAIN}"
+            fi
+            if [ -n "${SAMPLEPATHFA}" ] && [ -f "${SAMPLEPATHFA}" ]; then
+                rm "${SAMPLEPATHFA}"
+            fi
+            if [ -n "${CHROMRENAME_SAMPLEPATHFA}" ] && [ -f "${CHROMRENAME_SAMPLEPATHFA}" ]; then
+                rm "${CHROMRENAME_SAMPLEPATHFA}"
+                rm "${CHROMRENAME_SAMPLEPATHFA}.fai"
+            fi
+            if [ -n "${RENAMEDHEADERSAMPLEFA}" ] && [ -f "${RENAMEDHEADERSAMPLEFA}" ]; then
+                rm "${RENAMEDHEADERSAMPLEFA}"
+            fi
+            if [ -n "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}" ] && [ -f "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}" ]; then
+                rm "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}"
+            fi
+            if [ -n "${PATHOLIFTEDSAMPLEGFF}" ] && [ -f "${PATHOLIFTEDSAMPLEGFF}" ]; then
+                rm "${PATHOLIFTEDSAMPLEGFF}"
+                rm "${PATHOLIFTEDSAMPLEGFF}".*.unmap
+            fi
 
         done
     done < "${DATADIR}/${SAMPLENAMES}"
 
+    if [ -n "${SINGLE_VAR_TMP_VCF}" ] && [ -f "${SINGLE_VAR_TMP_VCF}" ]; then
+        rm "${SINGLE_VAR_TMP_VCF}"
+        rm "${SINGLE_VAR_TMP_VCF}.csi"
+    fi
 
 done
 
