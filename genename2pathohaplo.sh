@@ -17,6 +17,39 @@ GENESAMPLESHAPLODIR="${GENEDIR}/samples"
 GENESAMPLESPATHODIR="${GENEDIR}/samples_patho"
 mkdir -p "${GENESAMPLESPATHODIR}"
 
+
+
+localize_chain() {
+    local GLOBAL_CHAIN=$1
+    local LOCAL_CHAIN=$2
+
+    awk '
+    BEGIN {FS=OFS=" "}
+
+    /^chain/ {
+        # Reference (Target) coordinates
+        r_start = $6
+        $6 = 0
+        $7 = $7 - r_start    # Shift target end to local 0-based
+        $4 = $7              # Update target total size to local length
+
+        # Sample (Query) coordinates
+        s_start = $11
+        $11 = 0
+        $12 = $12 - s_start  # Shift query end to local 0-based
+        $9 = $12             # Update query total size to local length
+
+        print $0
+        next
+    }
+
+    # Keep the alignment data blocks exactly as they are
+    { print $0 }
+    ' "$GLOBAL_CHAIN" > "$LOCAL_CHAIN"
+}
+
+
+
 bcftools query -f '%CHROM:%POS:%ALT\n' "$CLINVARGENELOCAL" | while read -r variant; do
 
     # DEBUG
@@ -75,7 +108,6 @@ bcftools query -f '%CHROM:%POS:%ALT\n' "$CLINVARGENELOCAL" | while read -r varia
             RENAMEDHEADERSAMPLEFA="${PREFIX_PTH}.hdr.fa"
             if [ ! -s "${RENAMEDHEADERSAMPLEFA}" ]; then
               echo "Creating ${RENAMEDHEADERSAMPLEFA}..."
-              #sed "s/>.*/>${CHROM}/" "${ORIGINALSAMPLEFAHEADER}" > "${RENAMEDHEADERSAMPLEFA}"
               sed "1s/>.*/>${CHROM}/" "${ORIGINALSAMPLEFA}" > "${RENAMEDHEADERSAMPLEFA}"
             else
               echo "Skipping creation of ${RENAMEDHEADERSAMPLEFA}..."
@@ -85,7 +117,44 @@ bcftools query -f '%CHROM:%POS:%ALT\n' "$CLINVARGENELOCAL" | while read -r varia
               exit 1
             fi
 
-            # 4. Run consensus
+            # coordinates from FASTA header
+            COORDS="${ORIGINALSAMPLEFAHEADER#*:}"
+            START="${COORDS%-*}"
+            END="${COORDS#*-}"
+            REGION_LEN=$(( END - START + 1 ))
+            SAMPLE_START=0
+
+            # create  local chain file
+            LOCAL_CHAIN="${PREFIX_PTH}.local.chain"
+            localize_chain "${PREFIX_HAP}.chain" "${LOCAL_CHAIN}"
+            # "${START}" "${SAMPLE_START}" "${REGION_LEN}"
+
+            # liftover the tmp pathogenic variant VCF to match sample coordinates
+            LIFTOVER_SINGLE_VAR_TMP_VCF="${PREFIX_PTH}.${CHR_POS_ALT}.liftover.vcf"
+            if [ ! -s "${LIFTOVER_SINGLE_VAR_TMP_VCF}" ]; then
+              echo "Creating ${LIFTOVER_SINGLE_VAR_TMP_VCF}..."
+              CrossMap vcf "${LOCAL_CHAIN}" "${SINGLE_VAR_TMP_VCF}" "${RENAMEDHEADERSAMPLEFA}" "${LIFTOVER_SINGLE_VAR_TMP_VCF}"
+            else
+              echo "Skipping creation of ${LIFTOVER_SINGLE_VAR_TMP_VCF}..."
+            fi
+            if [ ! -s "${LIFTOVER_SINGLE_VAR_TMP_VCF}" ]; then
+              echo "File ${LIFTOVER_SINGLE_VAR_TMP_VCF} missing or empty for ${SAMPLE} h${H}."
+              exit 1
+            fi
+            if [ ! -s "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz" ]; then
+              echo "Creating ${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz..."
+              bgzip -c "${LIFTOVER_SINGLE_VAR_TMP_VCF}" > "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz"
+              bcftools index "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz"
+            else
+              echo "Skipping creation of ${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz..."
+            fi
+            if [ ! -s "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz" ]; then
+              echo "File ${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz missing or empty for ${SAMPLE} h${H}."
+              exit 1
+            fi
+
+
+            # run consensus
             SAMPLEPATHCHAIN="${PREFIX_PTH}.${CHR_POS_ALT}.chain"
             SAMPLEPATHFA="${PREFIX_PTH}.${CHR_POS_ALT}.fa"
 
@@ -94,7 +163,7 @@ bcftools query -f '%CHROM:%POS:%ALT\n' "$CLINVARGENELOCAL" | while read -r varia
                 bcftools consensus \
                     -f "${RENAMEDHEADERSAMPLEFA}" \
                     -c "${SAMPLEPATHCHAIN}" \
-                    "${SINGLE_VAR_TMP_VCF}" \
+                    "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz" \
                     > "${SAMPLEPATHFA}"
             else
               echo "${SAMPLEPATHCHAIN} and ${SAMPLEPATHFA} present, skipping consensus..."
@@ -104,13 +173,10 @@ bcftools query -f '%CHROM:%POS:%ALT\n' "$CLINVARGENELOCAL" | while read -r varia
                exit 1
             fi
 
-            # 2. FIX THE HEADER: Replace ">chr16" back with the original coordinate header
+            # FIX THE HEADER: Replace ">chr16" back with the original coordinate header
             # '1s/.*/.../' tells sed to only modify the first line of the file
             sed -i "" "1s/.*/${ORIGINALSAMPLEFAHEADER}/" "${SAMPLEPATHFA}"
             echo "Restored original FA header in ${SAMPLEPATHFA}"
-
-            # 5. Clean up temporary files
-            #rm "$tmp_vcf" "${tmp_vcf}.csi" tmp_temp_ref.fa
 
             HAPLIFTEDSAMPLEGFF="${PREFIX_HAP}.lifted.local.MANE.GRCh38.v1.3.ensembl_genomic.gff"
             CHROMRENAME_HAPLIFTEDSAMPLEGFF="${PREFIX_PTH}.lifted.local.chromrename.MANE.GRCh38.v1.3.ensembl_genomic.gff"
@@ -177,6 +243,7 @@ bcftools query -f '%CHROM:%POS:%ALT\n' "$CLINVARGENELOCAL" | while read -r varia
             fi
             if [ -n "${RENAMEDHEADERSAMPLEFA}" ] && [ -f "${RENAMEDHEADERSAMPLEFA}" ]; then
                 rm "${RENAMEDHEADERSAMPLEFA}"
+                rm "${RENAMEDHEADERSAMPLEFA}.fai"
             fi
             if [ -n "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}" ] && [ -f "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}" ]; then
                 rm "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}"
@@ -185,6 +252,22 @@ bcftools query -f '%CHROM:%POS:%ALT\n' "$CLINVARGENELOCAL" | while read -r varia
                 rm "${PATHOLIFTEDSAMPLEGFF}"
                 rm "${PATHOLIFTEDSAMPLEGFF}".*.unmap
             fi
+            if [ -n "${LIFTOVER_SINGLE_VAR_TMP_VCF}" ] && [ -f "${LIFTOVER_SINGLE_VAR_TMP_VCF}" ]; then
+                rm "${LIFTOVER_SINGLE_VAR_TMP_VCF}"
+            fi
+            if [ -n "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz" ] && [ -f "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz" ]; then
+                rm "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz"
+            fi
+            if [ -n "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz.csi" ] && [ -f "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz.csi" ]; then
+                rm "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz.csi"
+            fi
+            if [ -n "${LIFTOVER_SINGLE_VAR_TMP_VCF}.unmap" ] && [ -f "${LIFTOVER_SINGLE_VAR_TMP_VCF}.unmap" ]; then
+                rm "${LIFTOVER_SINGLE_VAR_TMP_VCF}.unmap"
+            fi
+            if [ -n "${LOCAL_CHAIN}" ] && [ -f "${LOCAL_CHAIN}" ]; then
+                rm "${LOCAL_CHAIN}"
+            fi
+
 
         done
     done < "${DATADIR}/${SAMPLENAMES}"
