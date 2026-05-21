@@ -50,7 +50,7 @@ localize_chain() {
 
 
 
-bcftools query -f '%CHROM:%POS:%ALT\n' "$CLINVARGENELOCAL" | while read -r variant; do
+bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "$CLINVARGENELOCAL" | while read -r variant; do
 
     # DEBUG
     #variant="chr16:1379:TAC"
@@ -59,7 +59,8 @@ bcftools query -f '%CHROM:%POS:%ALT\n' "$CLINVARGENELOCAL" | while read -r varia
     # NOTE: we assume 1 alt per line, check if this is really true!!
     CHROM=$(echo "$variant" | cut -d':' -f1)
     POS=$(echo "$variant" | cut -d':' -f2)
-    ALT=$(echo "$variant" | cut -d':' -f3)
+    ID=$(echo "$variant" | cut -d':' -f3)
+    ALT=$(echo "$variant" | cut -d':' -f4)
     CHR_POS_ALT="${CHROM}_${POS}_${ALT}"
 
     echo "Processing variant at $CHROM:$POS with ALT allele $ALT..."
@@ -88,7 +89,7 @@ bcftools query -f '%CHROM:%POS:%ALT\n' "$CLINVARGENELOCAL" | while read -r varia
             PREFIX_PTH="${GENESAMPLESPATHODIR}/${SAMPLE}.h${H}"
 
             # protein file output location, can already check and skip if present!
-            SAMPLEPATH_PROT="${PREFIX_PTH}.${CHR_POS_ALT}.protein.fa"
+            SAMPLEPATH_PROT="${PREFIX_PTH}.${CHR_POS_ALT}.${ID}.protein.fa"
             if [ -s "${SAMPLEPATH_PROT}" ]; then
               echo "File ${SAMPLEPATH_PROT} already present for ${SAMPLE} h${H}, skipping to next..."
               continue
@@ -279,12 +280,3 @@ bcftools query -f '%CHROM:%POS:%ALT\n' "$CLINVARGENELOCAL" | while read -r varia
 
 done
 
-# liftover MANE coordinates:
-
-
-
-# % diff HG00620.h1.chr16_14348.protein.fa tmp/MEFV/samples/HG00620.h1.protein.fa
-# 11c11
-# < DGPQRFDSCIIVLGSPSFLSGRRYWEVEVGDKTAWILGACKTSISRKGNMTLSPENGYWVVIMVKENEYQ
-# ---
-# > DGPQRFDSCIIVLGSPSFLSGRRYWEVEVGDKTAWILGACKTSISRKGNMTLSPENGYWVVIMMKENEYQ
