@@ -7,3 +7,11 @@ Example run (needs to be in this order):
 3. ./genename2pathohaplo.sh MEFV
 
 
+### notes
+UCSC API: 0-based
+https://api.genome.ucsc.edu/getData/sequence?genome=hg38;chrom=16;start=3243404;end=3243407
+-> CAT
+
+ClinVar VCF: 1-based
+POS 3243405 -> CAT
+
