@@ -343,7 +343,7 @@ else
       for (i = 1; i <= n; i++) {
           seq = order[i]
 
-          printf ">%s_protein_variant_%d|n=%d|samples=%s\n", gene, i, count[seq], samples[seq]
+          printf ">%s_protein_path_variant_%d|n=%d|samples=%s\n", gene, i, count[seq], samples[seq]
 
           for (j = 1; j <= length(seq); j += 60) {
               print substr(seq, j, 60)
