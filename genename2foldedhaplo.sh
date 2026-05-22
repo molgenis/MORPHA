@@ -62,42 +62,38 @@ for FASTA_FILE in "${NORMALHAPLO}" "${PATHHAPLO}"; do
 
         echo "  Processing variant: ${VARIANT_NAME} (${#AMINO_ACIDS} AA)..."
 
-        # Generate 10 models per variant to account for structural flexibility
-        for fold_num in {0..2}; do
+        PDB_OUTPUT="${PDBDIR}/${VARIANT_NAME}.pdb"
+        PDB_TMP="${PDB_OUTPUT}.tmp"
 
-            PDB_OUTPUT="${PDBDIR}/${VARIANT_NAME}_fold${fold_num}.pdb"
-            PDB_TMP="${PDB_OUTPUT}.tmp"
+        # Checkpoint: Skip if the finalized PDB already exists
+        if [ -s "${PDB_OUTPUT}" ]; then
+            echo "     -> PDB exists. Skipping..."
+            continue
+        fi
 
-            # Checkpoint: Skip if the finalized PDB already exists
-            if [ -s "${PDB_OUTPUT}" ]; then
-                echo "     -> _fold${fold_num}.pdb exists. Skipping..."
-                continue
-            fi
+        echo "     -> Requesting fold..."
 
-            echo "     -> Requesting fold ${fold_num}/2..."
+        # Clean up any broken leftover temp files from a previous aborted run
+        rm -f "${PDB_TMP}"
 
-            # Clean up any broken leftover temp files from a previous aborted run
+        # 1. Download directly to the temporary file
+        curl -s -X POST http://192.168.2.9:8000/fold \
+          -H "Content-Type: application/json" \
+          -d "{\"sequence\":\"${AMINO_ACIDS}\"}" \
+          -o "${PDB_TMP}"
+
+        # 2. Only promote to a real .pdb if the download completed successfully
+        if [ -s "${PDB_TMP}" ]; then
+            mv "${PDB_TMP}" "${PDB_OUTPUT}"
+        else
+            echo "     [WARNING] Fold failed or server returned empty data."
             rm -f "${PDB_TMP}"
+        fi
 
-            # 1. Download directly to the temporary file
-            curl -s -X POST http://192.168.2.9:8000/fold \
-              -H "Content-Type: application/json" \
-              -d "{\"sequence\":\"${AMINO_ACIDS}\"}" \
-              -o "${PDB_TMP}"
-
-            # 2. Only promote to a real .pdb if the download completed successfully
-            if [ -s "${PDB_TMP}" ]; then
-                mv "${PDB_TMP}" "${PDB_OUTPUT}"
-            else
-                echo "     [WARNING] Fold ${fold_num} failed or server returned empty data."
-                rm -f "${PDB_TMP}"
-            fi
-
-        done
     done
 done
 
-echo "Execution complete. All normal and pathogenic variants folded 10x!"
+echo "Execution complete. All normal and pathogenic variants folded."
 
 
 #curl -X POST http://192.168.2.9:8000/fold \
