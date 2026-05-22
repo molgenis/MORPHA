@@ -5,6 +5,14 @@ Example run (needs to be in this order):
 1. ./genename2uniqproteinhaplo.sh MEFV
 2. ./genename2pathogenicvariants.sh MEFV
 3. ./genename2pathohaplo.sh MEFV
+4. ./genename2foldedhaplo MEFV
+
+Dependencies:
+- esmfold-server https://github.com/joerivandervelde/esmfold-server
+- samtools 1.23.1
+- bcftools 1.23.1
+- CrossMap 0.7.0
+- gffread 0.12.9
 
 
 ### notes
