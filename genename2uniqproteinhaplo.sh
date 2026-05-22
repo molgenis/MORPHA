@@ -357,3 +357,10 @@ else
 fi
 
 echo "...all done"
+
+# --> inspect file and number of haplotypes:
+# tail -50 MEFV_protein_haplotypes.fa
+# --> check based on sequences:
+# awk '/^>/ {printf("\n%s\n",$0);next} {printf("%s",$0)} END {printf("\n")}' MEFV_protein_haplotypes.fa | grep -v "^>" | grep -v "^$" | sort | uniq | wc -l
+# --> check based on headers:
+# grep -c "^>" MEFV_protein_haplotypes.fa

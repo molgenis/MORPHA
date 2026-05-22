@@ -280,3 +280,84 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "$CLINVARGENELOCAL" | while read -r v
 
 done
 
+# collect all protein sequences in one TSV
+PROTPERSAMPLEANDPATHO="${GENEDIR}/${GENE}_protein_sequences_per_sample_and_patho.tsv"
+if [ -s "${PROTPERSAMPLEANDPATHO}" ]; then
+    echo "File ${PROTPERSAMPLEANDPATHO} exists and not empty, skipping collection of sequences..."
+else
+	: > "${PROTPERSAMPLEANDPATHO}"
+	for f in "${GENESAMPLESPATHODIR}/"*.protein.fa; do
+	    id=$(basename "$f" .protein.fa)
+	    nhead=$(grep -c '^>' "$f")
+	    if [ "$nhead" -ne 1 ]; then
+	        echo "Error: expected exactly 1 FASTA record in $f, found $nhead" >&2
+	        exit 1
+	    fi
+	    seq=$(awk '
+	        /^>/ {next}
+	        {
+	            gsub(/[[:space:]]/, "", $0)
+	            printf "%s", toupper($0)
+	        }
+	    ' "$f")
+	    if [ -z "$seq" ]; then
+	        echo "Error: empty protein sequence in $f" >&2
+	        exit 1
+	    fi
+	    echo "Collecting protein sequence into ${PROTPERSAMPLEANDPATHO}"
+	    printf "%s\t%s\n" "$id" "$seq" >> "${PROTPERSAMPLEANDPATHO}"
+	done
+fi
+
+
+
+# group identical protein sequences together and store in results
+RESULTDIR=results
+mkdir -p "${RESULTDIR}"
+UNIQUEPROTGROUPED="${RESULTDIR}/${GENE}_protein_path_haplotypes.fa"
+
+if [ -s "${UNIQUEPROTGROUPED}" ]; then
+    echo "File ${UNIQUEPROTGROUPED} exists and not empty, skipping grouping of sequences..."
+else
+  echo "Grouping protein sequence into ${UNIQUEPROTGROUPED}"
+  awk -F'\t' -v gene="$GENE" '
+  {
+      id = $1
+      seq = $2
+
+      if (!(seq in seen)) {
+          seen[seq] = ++n
+          order[n] = seq
+      }
+
+      if (samples[seq] == "") {
+          samples[seq] = id
+      } else {
+          samples[seq] = samples[seq] "," id
+      }
+
+      count[seq]++
+  }
+
+  END {
+      for (i = 1; i <= n; i++) {
+          seq = order[i]
+
+          printf ">%s_protein_variant_%d|n=%d|samples=%s\n", gene, i, count[seq], samples[seq]
+
+          for (j = 1; j <= length(seq); j += 60) {
+              print substr(seq, j, 60)
+          }
+      }
+  }
+  ' "${PROTPERSAMPLEANDPATHO}" > "${UNIQUEPROTGROUPED}"
+fi
+
+echo "...all done"
+
+# --> inspect file and number of haplotypes:
+# tail -50 MEFV_protein_path_haplotypes.fa
+# --> check based on sequences:
+# awk '/^>/ {printf("\n%s\n",$0);next} {printf("%s",$0)} END {printf("\n")}' MEFV_protein_path_haplotypes.fa | grep -v "^>" | grep -v "^$" | sort | uniq | wc -l
+# --> check based on headers:
+# grep -c "^>" MEFV_protein_path_haplotypes.fa
