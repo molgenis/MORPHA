@@ -280,33 +280,42 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "$CLINVARGENELOCAL" | while read -r v
 
 done
 
-# collect all protein sequences in one TSV
+# collect all protein sequences in one TSV - truncate sequences with stop gain
 PROTPERSAMPLEANDPATHO="${GENEDIR}/${GENE}_protein_sequences_per_sample_and_patho.tsv"
 if [ -s "${PROTPERSAMPLEANDPATHO}" ]; then
-    echo "File ${PROTPERSAMPLEANDPATHO} exists and not empty, skipping collection of sequences..."
+    echo "File ${PROTPERSAMPLEANDPATHO} exists and not empty, skipping collection..."
 else
-	: > "${PROTPERSAMPLEANDPATHO}"
-	for f in "${GENESAMPLESPATHODIR}/"*.protein.fa; do
-	    id=$(basename "$f" .protein.fa)
-	    nhead=$(grep -c '^>' "$f")
-	    if [ "$nhead" -ne 1 ]; then
-	        echo "Error: expected exactly 1 FASTA record in $f, found $nhead" >&2
-	        exit 1
-	    fi
-	    seq=$(awk '
-	        /^>/ {next}
-	        {
-	            gsub(/[[:space:]]/, "", $0)
-	            printf "%s", toupper($0)
-	        }
-	    ' "$f")
-	    if [ -z "$seq" ]; then
-	        echo "Error: empty protein sequence in $f" >&2
-	        exit 1
-	    fi
-	    echo "Collecting protein sequence into ${PROTPERSAMPLEANDPATHO}"
-	    printf "%s\t%s\n" "$id" "$seq" >> "${PROTPERSAMPLEANDPATHO}"
-	done
+  : > "${PROTPERSAMPLEANDPATHO}"
+  for f in "${GENESAMPLESPATHODIR}/"*.protein.fa; do
+      id=$(basename "$f" .protein.fa)
+
+      # Use awk to build the full sequence, then truncate at the first asterisk
+      seq=$(awk '
+          /^>/ {next}
+          {
+              gsub(/[[:space:]]/, "", $0)
+              full_seq = full_seq toupper($0)
+          }
+          END {
+              stop_pos = index(full_seq, "*")
+              if (stop_pos > 0) {
+                  # Cut off everything from the * onwards
+                  print substr(full_seq, 1, stop_pos - 1)
+              } else {
+                  print full_seq
+              }
+          }
+      ' "$f")
+
+      if [ -z "$seq" ]; then
+          # Note: If a stop codon is at the very first position, the sequence becomes empty
+          echo "Warning: Protein sequence for $id is empty (possible immediate stop codon)" >&2
+          continue
+      fi
+
+      printf "%s\t%s\n" "$id" "$seq" >> "${PROTPERSAMPLEANDPATHO}"
+  done
+  echo "Collection and truncation complete."
 fi
 
 
