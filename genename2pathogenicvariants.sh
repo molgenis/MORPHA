@@ -21,24 +21,7 @@ if [[ ! -s "${DATADIR}/${CLINVARVCFGZ}" ]]; then
     exit 1
 fi
 
-CLINVARGENE="${GENEDIR}/ClinVarPathogenic"
-CLINVARGENEVCF="${CLINVARGENE}.vcf"
-CLINVARGENEVCFGZ="${CLINVARGENEVCF}.gz"
-
-if [ ! -s "${CLINVARGENEVCF}" ]; then
-    echo "File ${CLINVARGENEVCF} not found, extracting from full ClinVar file..."
-    printf "##fileformat=VCFv4.2\n" > "${CLINVARGENEVCF}"
-    printf "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n" >> "${CLINVARGENEVCF}"
-    zgrep -i "${GENE}" "${DATADIR}/${CLINVARVCFGZ}" | grep -i "CLNSIG=Pathogenic;" >> "${CLINVARGENEVCF}"
-else
-    echo "File ${CLINVARGENEVCF} exists, skipping extraction..."
-fi
-if [[ ! -s "${CLINVARGENEVCF}" ]]; then
-    echo "Error: File ${CLINVARGENEVCF} not found or empty."
-    exit 1
-fi
-
-# get region and replace in VCF
+# get region
 GRCh38MANEGFF=MANE.GRCh38.v1.3.ensembl_genomic.gff
 DATA=$(awk -F'\t' '$3=="transcript" {print $1, $4, $5; exit}' "${GENEDIR}/${GRCh38MANEGFF}")
 if [ -z "$DATA" ]; then
@@ -52,6 +35,40 @@ if [[ -z "$CHR" || -z "$START" || -z "$END" ]]; then
 fi
 REGION="${CHR}:${START}-${END}"
 echo "Extracted region for this gene is $REGION"
+
+CLINVARGENE="${GENEDIR}/ClinVarPathogenic"
+CLINVARGENEVCF="${CLINVARGENE}.vcf"
+CLINVARGENEVCFGZ="${CLINVARGENEVCF}.gz"
+
+if [ ! -s "${CLINVARGENEVCF}" ]; then
+    echo "File ${CLINVARGENEVCF} not found, extracting from full ClinVar file using coordinates..."
+    # Ensure the master ClinVar file is indexed for coordinate slicing
+    if [ ! -f "${DATADIR}/${CLINVARVCFGZ}.tbi" ] && [ ! -f "${DATADIR}/${CLINVARVCFGZ}.csi" ]; then
+        echo "Master ClinVar index missing. Generating tabix index..."
+        tabix -p vcf "${DATADIR}/${CLINVARVCFGZ}"
+    fi
+    # --- THE CHROMOSOME TRAP FIX ---
+    # MANE GFF files use UCSC format ("chr5"), but NCBI ClinVar often uses plain integers ("5").
+    # This snippet checks the master VCF format and cleans up your REGION string if needed.
+    if bcftools view -h "${DATADIR}/${CLINVARVCFGZ}" | grep -q "ID=chr"; then
+        CLINVAR_REGION="${REGION}"
+    else
+        CLINVAR_REGION="${REGION#chr}" # Strips the "chr" prefix if ClinVar expects plain numbers
+    fi
+    # Extract the target coordinates and isolate Pathogenic variants natively
+    # Using 'CLNSIG ~ "Pathogenic"' captures "Pathogenic", "Pathogenic/Likely_pathogenic", etc.
+    bcftools view \
+        -r "${CLINVAR_REGION}" \
+        -i 'CLNSIG=="Pathogenic"' \
+        -O v \
+        "${DATADIR}/${CLINVARVCFGZ}" > "${CLINVARGENEVCF}"
+else
+    echo "File ${CLINVARGENEVCF} exists, skipping extraction..."
+fi
+if [[ ! -s "${CLINVARGENEVCF}" ]]; then
+    echo "Error: File ${CLINVARGENEVCF} not found or empty after coordinate extraction."
+    exit 1
+fi
 
 # shift coordinates to local frame and rename chromosome to hg38 nomenclature
 if [ ! -s  "${CLINVARGENE}.local.vcf" ]; then
