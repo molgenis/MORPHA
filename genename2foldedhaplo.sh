@@ -7,7 +7,7 @@ GENE=$1
 
 echo "Starting script with gene name = ${GENE}"
 
-RESULTDIR=results
+RESULTDIR="results/${GENE}"
 NORMALHAPLO="${RESULTDIR}/${GENE}_protein_haplotypes.fa"
 PATHHAPLO="${RESULTDIR}/${GENE}_protein_path_haplotypes.fa"
 PDBDIR="${RESULTDIR}/${GENE}/folded"
