@@ -321,7 +321,7 @@ fi
 
 
 # group identical protein sequences together and store in results
-RESULTDIR=results
+RESULTDIR="results/${GENE}"
 mkdir -p "${RESULTDIR}"
 UNIQUEPROTGROUPED="${RESULTDIR}/${GENE}_protein_path_haplotypes.fa"
 
