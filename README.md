@@ -9,10 +9,11 @@ Example run (needs to be in this order):
 
 Dependencies:
 - esmfold-server https://github.com/joerivandervelde/esmfold-server
-- samtools 1.23.1
+- samtools 1.23.1 (also tested with 1.13, seems OK)
 - bcftools 1.23.1
 - CrossMap 0.7.0
 - gffread 0.12.9
+- tabix 1.17 (also tested with 1.13, seems OK)
 
 
 ### notes
@@ -23,3 +24,28 @@ https://api.genome.ucsc.edu/getData/sequence?genome=hg38;chrom=16;start=3243404;
 ClinVar VCF: 1-based
 POS 3243405 -> CAT
 
+## Ubuntu WSL install and run
+
+### install the following
+sudo apt install samtools # old but might be OK, else compile from src like bcftools below
+sudo apt install gffread
+sudo apt install python3-pip
+sudo apt install tabix
+pip3 install CrossMap
+
+### install latest BCFtools from source because default Ubuntu install is too old
+sudo apt-get update
+sudo apt-get install -y build-essential bzip2 libbz2-dev xz-utils liblzma-dev zlib1g-dev libcurl4-gnutls-dev libssl-dev
+wget https://github.com/samtools/bcftools/releases/download/1.23.1/bcftools-1.23.1.tar.bz2
+tar -xjvf bcftools-1.23.1.tar.bz2
+cd bcftools-1.23.1
+./configure --prefix=$HOME/.local
+make
+make install
+export PATH="$HOME/.local/bin:$PATH"
+
+# before running, fix line endings if checkout was done under Windows
+sed -i 's/\r//' genename2uniqproteinhaplo.sh
+sed -i 's/\r//' genename2pathogenicvariants.sh
+sed -i 's/\r//' genename2pathohaplo.sh
+sed -i 's/\r//' genename2foldedhaplo.sh
