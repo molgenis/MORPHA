@@ -12,7 +12,7 @@ CLINVARVCFGZ=clinvar_20260503.vcf.gz
 
 if [ ! -s "${DATADIR}/${CLINVARVCFGZ}" ]; then
     echo "File ${DATADIR}/${CLINVARVCFGZ} not found, downloading..."
-    wget -P "${DATADIR}" "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh38/archive_2.0/2026/${GRCh38REFFA}"
+    wget -O "${DATADIR}/${CLINVARVCFGZ}" "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh38/archive_2.0/2026/${CLINVARVCFGZ}"
 else
     echo "File ${DATADIR}/${CLINVARVCFGZ} exists, skipping download..."
 fi
