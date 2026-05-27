@@ -174,11 +174,6 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "$CLINVARGENELOCAL" | while read -r v
                exit 1
             fi
 
-            # FIX THE HEADER: Replace ">chr16" back with the original coordinate header
-            # '1s/.*/.../' tells sed to only modify the first line of the file
-            sed -i "" "1s/.*/${ORIGINALSAMPLEFAHEADER}/" "${SAMPLEPATHFA}"
-            echo "Restored original FA header in ${SAMPLEPATHFA}"
-
             HAPLIFTEDSAMPLEGFF="${PREFIX_HAP}.lifted.local.MANE.GRCh38.v1.3.ensembl_genomic.gff"
             CHROMRENAME_HAPLIFTEDSAMPLEGFF="${PREFIX_PTH}.lifted.local.chromrename.MANE.GRCh38.v1.3.ensembl_genomic.gff"
 
@@ -200,20 +195,6 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "$CLINVARGENELOCAL" | while read -r v
               exit 1
             fi
 
-
-            # also rename from the sample patho FA file...
-            CHROMRENAME_SAMPLEPATHFA="${SAMPLEPATHFA}.chromrename.fa"
-            if [ ! -s "${CHROMRENAME_SAMPLEPATHFA}" ]; then
-               echo "Creating renamed chrom sample patho FA file ${CHROMRENAME_SAMPLEPATHFA}..."
-               sed "1s/>.*/>${CHROM}/" "${SAMPLEPATHFA}" > "${CHROMRENAME_SAMPLEPATHFA}"
-            else
-              echo "Skipping creation of ${CHROMRENAME_SAMPLEPATHFA}..."
-            fi
-            if [ ! -s "${CHROMRENAME_SAMPLEPATHFA}" ]; then
-              echo "File ${CHROMRENAME_SAMPLEPATHFA} missing or empty for ${SAMPLE} h${H}."
-              exit 1
-            fi
-
             # then perform liftover to pathogenic variant coordinates
             PATHOLIFTEDSAMPLEGFF="${PREFIX_PTH}.patholifted.local.MANE.GRCh38.v1.3.ensembl_genomic.gff"
             #echo "Running CrossMap: CrossMap gff ${SAMPLEPATHCHAIN} ${CHROMRENAME_HAPLIFTEDSAMPLEGFF} ${PATHOLIFTEDSAMPLEGFF}"
@@ -226,7 +207,7 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "$CLINVARGENELOCAL" | while read -r v
             echo "Now translating to protein"
             SAMPLEPATH_CDS="${PREFIX_PTH}.${CHR_POS_ALT}.cds.fa"
             #echo "gffread ${PATHOLIFTEDSAMPLEGFF} -g ${PREFIX_PTH}.${CHR_POS_ALT}.renamed.fa -x ${PREFIX_PTH}.${CHR_POS_ALT}.cds.fa -y ${PREFIX_PTH}.${CHR_POS_ALT}.protein.fa -S"
-            gffread "${PATHOLIFTEDSAMPLEGFF}" -g "${CHROMRENAME_SAMPLEPATHFA}" -x "${SAMPLEPATH_CDS}" -y "${SAMPLEPATH_PROT}" -S
+            gffread "${PATHOLIFTEDSAMPLEGFF}" -g "${SAMPLEPATHFA}" -x "${SAMPLEPATH_CDS}" -y "${SAMPLEPATH_PROT}" -S
 
             # need to clean up since we process so many samples x haplotypes x mutations, only keep protein file
             if [ -n "${SAMPLEPATH_CDS}" ] && [ -f "${SAMPLEPATH_CDS}" ]; then
@@ -237,10 +218,7 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "$CLINVARGENELOCAL" | while read -r v
             fi
             if [ -n "${SAMPLEPATHFA}" ] && [ -f "${SAMPLEPATHFA}" ]; then
                 rm "${SAMPLEPATHFA}"
-            fi
-            if [ -n "${CHROMRENAME_SAMPLEPATHFA}" ] && [ -f "${CHROMRENAME_SAMPLEPATHFA}" ]; then
-                rm "${CHROMRENAME_SAMPLEPATHFA}"
-                rm "${CHROMRENAME_SAMPLEPATHFA}.fai"
+                rm "${SAMPLEPATHFA}.fai"
             fi
             if [ -n "${RENAMEDHEADERSAMPLEFA}" ] && [ -f "${RENAMEDHEADERSAMPLEFA}" ]; then
                 rm "${RENAMEDHEADERSAMPLEFA}"
