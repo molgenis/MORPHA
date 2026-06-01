@@ -31,9 +31,12 @@ POS 3243405 -> CAT
 ## Quantify protein stability example
 ```
 for i in {1..57}; do
-   echo "--- Processing Variant $i ---"
    /Applications/FoldX/foldx5_Mac_0/foldx_20261231 --command=RepairPDB --pdb=MEFV_protein_variant_${i}.pdb
    /Applications/FoldX/foldx5_Mac_0/foldx_20261231 --command=Stability --pdb=MEFV_protein_variant_${i}_Repair.pdb
+done
+for i in {1..275}; do
+   /Applications/FoldX/foldx5_Mac_0/foldx_20261231 --command=RepairPDB --pdb=MEFV_protein_path_variant_${i}.pdb
+   /Applications/FoldX/foldx5_Mac_0/foldx_20261231 --command=Stability --pdb=MEFV_protein_path_variant_${i}_Repair.pdb
 done
 ```
 
