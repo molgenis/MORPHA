@@ -20,34 +20,39 @@ head(igsr_samples_expanded)
 # --- helper Function to Parse FASTA files ---
 parse_fasta <- function(file_path, variant_type) {
   fasta_lines <- readLines(file_path)
-  header_lines <- fasta_lines[grep("^>", fasta_lines)]
+  header_lines <- fasta_lines[str_detect(fasta_lines, "^>")]
   
-  parsed_list <- list()
-  for (header in header_lines) {
-    # extract variant ID (e.g., MEFV_protein_path_variant_243)
-    variant_name <- sub("^>([^|]+)\\|.*", "\\1", header)
+  parsed_df <- map_dfr(header_lines, function(header) {
+    # Extract variant ID (e.g., MEFV_protein_path_variant_243)
+    variant_name <- str_match(header, "^>([^|]+)")[, 2]
     
-    # extract sample string
-    samples_part <- sub(".*samples=([^|]+).*", "\\1", header)
-    haps <- unlist(strsplit(samples_part, ","))
+    # Extract sample string
+    samples_part <- str_match(header, "samples=([^|]+)")[, 2]
+    haps <- unlist(str_split(samples_part, ","))
     
-    # clean the haplotype names (e.g., 'NA18974.h1.chr16...' -> 'NA18974.h1')
-    haps_clean <- sub("^([^.]+\\.h[12]).*", "\\1", haps)
+    # NEW: Extract the ClinVarID trailing numeric value (e.g., ..._T.917511 -> 917511)
+    # If it's a WT variant without a ClinVar dot ID, it assigns NA safely.
+    clinvar_ids <- str_match(haps, "\\.(\\d+)$")[, 2]
     
-    parsed_list[[length(parsed_list) + 1]] <- data.frame(
+    # Clean the haplotype names (e.g., 'NA18974.h1.chr16...' -> 'NA18974.h1')
+    haps_clean <- str_match(haps, "^([^.]+\\.h[12])")[, 2]
+    
+    data.frame(
       Haplotype = haps_clean,
       Variant = variant_name,
       Origin = variant_type,
+      ClinVarID = clinvar_ids,
       stringsAsFactors = FALSE
     )
-  }
-  return(do.call(rbind, parsed_list))
+  })
+  
+  return(parsed_df)
 }
 
-# parse both FASTA files for wild-type (WT) and pathogenic (PG) and combine
+# Parse both FASTA files and combine
 wt_variants <- parse_fasta(paste0("results/", gene, "/", gene, "_protein_haplotypes.fa"), "WT")
-pg_variants   <- parse_fasta(paste0("results/", gene, "/", gene, "_protein_path_haplotypes.fa"), "PG")
-all_variants <- rbind(wt_variants, pg_variants)
+pg_variants <- parse_fasta(paste0("results/", gene, "/", gene, "_protein_path_haplotypes.fa"), "PG")
+all_variants <- bind_rows(wt_variants, pg_variants)
 dim(all_variants)
 head(all_variants)
 
@@ -76,10 +81,12 @@ if (length(unmapped_igsr) > 0) {
 }
 
 # now merge with the master haplotype sheet
-final_df <- merge(igsr_samples_expanded, all_variants, by = "Haplotype")
+final_df <- igsr_samples_expanded %>%
+  left_join(all_variants, by = "Haplotype") %>%
+  select(Sample_name, Haplotype, Variant, Origin, ClinVarID)
 
 # reorder columns
-final_df <- final_df[, c("Sample_name", "Haplotype", "Variant", "Origin")]
+final_df <- final_df[, c("Sample_name", "Haplotype", "Variant", "Origin", "ClinVarID")]
 
 # save the output back in 'results' folder
 write.table(final_df, paste0("results/", gene, "/", gene, "_protein_haplotypes_matched_to_igsr.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
