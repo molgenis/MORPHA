@@ -1,11 +1,18 @@
 library(dplyr)
 library(ggplot2)
 library(maps)
+library(tidyr)
+library(stringr)
 
 gene <- "MEFV"
-
 setwd("~/git/MORPHA/")
 
+
+########################################################################
+# Merge IGSR sample metadata and protein haplotype quantification data #
+########################################################################
+
+# read IGSR sample metadata and clean up
 samples <- read.delim("viz/igsr_samples.tsv", sep = "\t", check.names = FALSE)
 samples$`Biosample ID` <- NULL
 samples$`Data collections` <- NULL
@@ -31,31 +38,75 @@ unmapped_samplesA
 unmapped_samplesB <- quant$Sample_name[!(quant$Sample_name %in% samples$`Sample name`)]
 unmapped_samplesB
 
-# MERGE THE DATA
-samples_quant <- quant %>%
+# Merge the data, now in long format
+samples_quant_long <- quant %>%
   left_join(samples, by = c("Sample_name" = "Sample name"))
 
-# aggregate metrics per population
+
+##########################################################################################
+# Pivot the data so that WT/pathogenic get their own columns and each row is a haplotype #
+##########################################################################################
+
+# Isolate the haplotype-specific WT energies as baseline
+wt_baselines <- samples_quant_long %>%
+  filter(Origin == "WT") %>%
+  select(Haplotype, WT_Energy = Total_Energy)
+
+# Process and reshape the data frame based strictly on ClinVarID
+samples_quant <- samples_quant_long %>%
+  # Step A: Filter down to just the pathogenic rows
+  filter(Origin == "PG") %>%
+  
+  # Step B: Attach the correct WT background energy for this specific haplotype
+  left_join(wt_baselines, by = "Haplotype") %>%
+  
+  # Step C: Calculate DDG using the individual's specific WT background
+  mutate(DDG = Total_Energy - WT_Energy) %>%
+  
+  # Step D: Prefix the ClinVarID column headers so they are clear (e.g., ClinVar_917511)
+  mutate(Column_Name = paste0("ClinVar_", ClinVarID)) %>%
+  
+  # Step E: Pivot wider so each ClinVar ID gets its own column containing the DDG
+  pivot_wider(
+    id_cols = c(Sample_name, Haplotype, WT_Energy, Sex, population_code, `Population name`),
+    names_from = Column_Name,
+    values_from = DDG
+  )
+
+# View the flattened haplotype-level data frame
+head(samples_quant)
+
+
+#############################################################
+# Aggregate WT/pathogenic quantifications per subpopulation #
+#############################################################
+
 pop_quant <- samples_quant %>%
   group_by(population_code) %>%
   summarise(
-    sample_size = n(),                         # Total number of haplotypes
-    mean_energy = mean(Total_Energy, na.rm = TRUE),
-    median_energy = median(Total_Energy, na.rm = TRUE),
-    sd_energy = sd(Total_Energy, na.rm = TRUE),
-    .groups = "drop"                           # Keeps downstream data manipulation clean
+    sample_size = n(),  # Total number of haplotypes in the population
+    
+    # Apply summary statistics across WT_Energy AND all ClinVar columns dynamically
+    across(
+      .cols = c(WT_Energy, starts_with("ClinVar_")),
+      .fns = list(
+        mean   = ~ mean(.x, na.rm = TRUE)
+        #median = ~ median(.x, na.rm = TRUE),
+        #sd     = ~ sd(.x, na.rm = TRUE)
+      ),
+      .names = "{.fn}_{.col}"  # Formats output column names (e.g., mean_ClinVar_917511)
+    ),
+    .groups = "drop"
   )
 
+# Preview the summary table
 head(pop_quant)
 
 
+################################################
+# Map subpopulations to geographic coordinates #
+################################################
 
-# aggregrate data to get total sample sizes per group
-#pop_quant <- samples_clean %>% count(population_code, name = "sample_size")
-
-
-# 3. Build a precise Coordinate and Ethnic Name Lookup Table
-# This breaks groups out by their specific sampling or historical locations
 pop_coordinates <- tibble(
   population_code = c(
     "CHB", "JPT", "CHS", "CDX", "KHV",               # East Asian Ancestry (EAS)
@@ -72,14 +123,14 @@ pop_coordinates <- tibble(
     "Gujarati Indians in Houston, TX", "Punjabi in Lahore, Pakistan", "Bengali in Bangladesh", "Indian Telugu in the UK", "Sri Lankan Tamil in the UK"
   ),
   longitude = c(
-    116.40, 139.70, 113.30, 100.80, 106.66,          # EAS
+    116.40, 136, 113.30, 100.80, 106.66,          # EAS
     2.00, 11.25, -1.50, 24.90, -3.70,                # EUR (CEU moved to Northwest Europe/France)
     3.90, 37.90, -16.60, -11.80, 6.80, -2.00, 1.00,  # AFR (ASW and ACB moved to West Africa near Nigeria/Ghana)
     -99.13, -66.60, -75.60, -77.04,                  # AMR (MXL moved to Central Mexico)
     72.57, 74.35, 90.40, 79.20, 80.70                # SAS (GIH, ITU, STU all in South Asia)
   ),
   latitude = c(
-    39.90, 35.68, 23.20, 22.00, 10.76,               # EAS
+    39.90, 36.2048, 23.20, 22.00, 10.76,               # EAS
     47.00, 43.77, 52.50, 60.17, 40.41,               # EUR
     7.38, -0.10, 13.45, 8.48, 6.20, 5.00, 6.00,      # AFR
     19.43, 18.22, 6.25, -12.04,                      # AMR
@@ -87,28 +138,39 @@ pop_coordinates <- tibble(
   )
 )
 
-# 4. Merge sample counts with geographic points
+
+###############################################################
+# Merge with subpopulation aggregates and load world polygons #
+###############################################################
+
 map_data_points <- pop_quant %>%
   left_join(pop_coordinates, by = "population_code")
-
-# 5. Plot using ggplot2
 world_map <- map_data("world")
+
+######################
+# Plot using ggplot2 #
+######################
+
+col_oceans = "lightblue" #"#edf4f9"
+col_countries = "gray" #f2f2f2"
+col_borders = "black" # "#d9d9d9"
+col_legend_bg = "#ffffffcc"
+col_legend_border = "#d9d9d9"
+
+# legend tucked into the lower right corner
 ggplot() +
   # Base Layer: A subtle, neutral background of world borders
   geom_polygon(data = world_map, aes(x = long, y = lat, group = group), 
-               fill = "#f2f2f2", color = "#d9d9d9", linewidth = 0.2) +
+               fill = col_countries, color = col_borders, linewidth = 0.2) +
   
   # Diversity Layer: Points representing distinct ethnic cohorts
-  # FIX 1: Added position_jitter so overlapping points nudge away from each other slightly
   geom_point(data = map_data_points, 
-             aes(x = longitude, y = latitude, color = population_name, size = mean_energy),
+             aes(x = longitude, y = latitude, color = population_name, size = mean_ClinVar_917511),
              alpha = 0.9,
              position = position_jitter(width = 2.5, height = 2.5, seed = 42)) +
   
   # Aesthetics and scaling
-  scale_size_continuous(range = c(3, 8), name = "Mean energy") +
-  
-  # FIX 2: Use the "Turbo" palette which maxes out distinct hues across 26 categories
+  scale_size_continuous(range = c(3, 8), name = "Folding energy ΔG (kJ/mol)") +
   scale_color_viridis_d(option = "turbo") +
   
   labs(
@@ -117,12 +179,37 @@ ggplot() +
     x = "Longitude", y = "Latitude",
     color = "Specific Population / Ethnicity"
   ) +
+  
+  # Set explicit layout order for the legends ---
+  # Mean energy gets order = 1 (Left), Population gets order = 2 (Right)
+  guides(
+    size = guide_legend(order = 1),
+    color = guide_legend(ncol = 2, order = 2, override.aes = list(size = 3))
+  ) +
+  
   theme_minimal() +
   theme(
-    panel.background = element_rect(fill = "#edf4f9", color = NA),
-    legend.position = "right",
-    legend.text = element_text(size = 8)
+    panel.background = element_rect(fill = col_oceans, color = NA),
+    legend.title = element_text(size = 9, face = "bold"),
+    legend.text = element_text(size = 7),
+    legend.key.height = unit(0.25, "cm"),
+    legend.key.spacing.y = unit(0.02, "cm"),
+    
+    # Positioning the main container inside the lower right
+    legend.position = "inside",              
+    legend.position.inside = c(0.99, 0.01),   
+    legend.justification = c(1, 0),          
+    
+    # Arrange distinct legend boxes horizontally side-by-side ---
+    legend.box = "horizontal",               # Places size and color scales next to each other
+    legend.box.just = "bottom",              # Aligns their bottom baselines cleanly
+    
+    # Styling background box
+    legend.background = element_rect(fill = col_legend_bg, color =col_legend_border, linewidth = 0.2),
+    legend.margin = margin(6, 6, 6, 6)       
   )
+
+
 
 
 
@@ -165,7 +252,7 @@ plot_data <- samples_quant %>%
 # ==============================================================================
 # STEP 3: Generate the Comparative Density Plot
 # ==============================================================================
-ggplot(plot_data, aes(x = Total_Energy, fill = superpopulation_name, color = superpopulation_name)) +
+ggplot(plot_data, aes(x = ClinVar_917511, fill = superpopulation_name, color = superpopulation_name)) +
   # Add geom_density with transparency (alpha) so overlapping distributions are visible
   geom_density(alpha = 0.35, linewidth = 0.7) +
   
@@ -192,3 +279,7 @@ ggplot(plot_data, aes(x = Total_Energy, fill = superpopulation_name, color = sup
     legend.position = "right",
     legend.title = element_text(face = "bold")
   )
+
+
+
+
