@@ -3,6 +3,7 @@ library(ggplot2)
 library(maps)
 library(tidyr)
 library(stringr)
+library(ggrepel)
 
 gene <- "MEFV"
 setwd("~/git/MORPHA/")
@@ -123,18 +124,18 @@ pop_coordinates <- tibble(
     "Gujarati Indians in Houston, TX", "Punjabi in Lahore, Pakistan", "Bengali in Bangladesh", "Indian Telugu in the UK", "Sri Lankan Tamil in the UK"
   ),
   longitude = c(
-    116.40, 136, 113.30, 100.80, 106.66,          # EAS
-    2.00, 11.25, -1.50, 24.90, -3.70,                # EUR (CEU moved to Northwest Europe/France)
-    3.90, 37.90, -16.60, -11.80, 6.80, -2.00, 1.00,  # AFR (ASW and ACB moved to West Africa near Nigeria/Ghana)
-    -99.13, -66.60, -75.60, -77.04,                  # AMR (MXL moved to Central Mexico)
+    116.40, 138, 113.30, 100.80, 106.66,          # EAS
+    10, 11.25, -2, 27, -3.70,                # EUR (CEU moved to Northwest Europe/France)
+    4, 37.90, -16.20, -11.80, 8, -110.5, -59.5,  # AFR (ASW and ACB moved to West Africa near Nigeria/Ghana)
+    -102, -66.60, -75.60, -77.04,                  # AMR (MXL moved to Central Mexico)
     72.57, 74.35, 90.40, 79.20, 80.70                # SAS (GIH, ITU, STU all in South Asia)
   ),
   latitude = c(
     39.90, 36.2048, 23.20, 22.00, 10.76,               # EAS
-    47.00, 43.77, 52.50, 60.17, 40.41,               # EUR
-    7.38, -0.10, 13.45, 8.48, 6.20, 5.00, 6.00,      # AFR
-    19.43, 18.22, 6.25, -12.04,                      # AMR
-    23.02, 31.52, 23.81, 14.50, 7.50                 # SAS
+    54, 43.77, 54, 65, 40.41,               # EUR
+    8.5, -0.10, 13.38, 8.48, 6.20, 37.5, 13.17,      # AFR
+    22, 18.22, 6.25, -12.04,                      # AMR
+    23.02, 31.4, 23.81, 14.50, 7.50                 # SAS
   )
 )
 
@@ -146,6 +147,7 @@ pop_coordinates <- tibble(
 map_data_points <- pop_quant %>%
   left_join(pop_coordinates, by = "population_code")
 world_map <- map_data("world")
+map_data_points$population_name_code <- paste0(map_data_points$population_name, " (",map_data_points$population_code,")")
 
 ######################
 # Plot using ggplot2 #
@@ -158,16 +160,37 @@ col_legend_bg = "#ffffffcc"
 col_legend_border = "#d9d9d9"
 
 # legend tucked into the lower right corner
-ggplot() +
+plot_mean_WT_Energy <- ggplot() +
   # Base Layer: A subtle, neutral background of world borders
   geom_polygon(data = world_map, aes(x = long, y = lat, group = group), 
                fill = col_countries, color = col_borders, linewidth = 0.2) +
   
   # Diversity Layer: Points representing distinct ethnic cohorts
   geom_point(data = map_data_points, 
-             aes(x = longitude, y = latitude, color = population_name, size = mean_ClinVar_917511),
-             alpha = 0.9,
-             position = position_jitter(width = 2.5, height = 2.5, seed = 42)) +
+             aes(x = longitude, y = latitude, color = population_name_code, size = mean_WT_Energy),
+             alpha = 0.9) +
+  #geom_label(data = map_data_points, 
+  #          aes(x = longitude, y = latitude, label = population_code), 
+  #          size = 2, fontface = "bold", color = "black") +
+  geom_label_repel(
+    data = map_data_points, 
+    aes(x = longitude, y = latitude, label = population_code), 
+    size = 2.2, 
+    fontface = "bold", 
+    color = "black",
+    fill = "#ffffffb3",          # Solid-ish white background box for readability
+    
+    # --- LINE FORCE PARAMETERS ---
+    min.segment.length = 0,      # FIX: Forces lines to ALWAYS draw even if very short
+    segment.size = 0.3,          # FIX: Replaced segment.linewidth to support your version
+    segment.color = "gray20",    # Dark gray lines look cleaner than stark black lines
+    
+    # --- PADDING AND DISTANCE ---
+    box.padding = 0.6,           # Pushes the labels a bit further out to give the lines room to breathe
+    point.padding = 0.4,         # Keeps the line from touching the very center of the circle
+    force = 8,                   # Increases the push away strength to display clear lines
+    max.overlaps = Inf
+  )+
   
   # Aesthetics and scaling
   scale_size_continuous(range = c(3, 8), name = "Folding energy ΔG (kJ/mol)") +
@@ -189,7 +212,7 @@ ggplot() +
   
   theme_minimal() +
   theme(
-    panel.background = element_rect(fill = col_oceans, color = NA),
+    panel.background = element_rect(fill = col_oceans, color = "black"),
     legend.title = element_text(size = 9, face = "bold"),
     legend.text = element_text(size = 7),
     legend.key.height = unit(0.25, "cm"),
@@ -200,7 +223,7 @@ ggplot() +
     legend.position.inside = c(0.99, 0.01),   
     legend.justification = c(1, 0),          
     
-    # Arrange distinct legend boxes horizontally side-by-side ---
+    # Arrange distinct legend boxes horizontally side-by-side
     legend.box = "horizontal",               # Places size and color scales next to each other
     legend.box.just = "bottom",              # Aligns their bottom baselines cleanly
     
@@ -209,7 +232,7 @@ ggplot() +
     legend.margin = margin(6, 6, 6, 6)       
   )
 
-
+ggsave(filename="plot_mean_WT_Energy.png", plot = plot_mean_WT_Energy, bg = "white", width = 10, height = 6.5)
 
 
 
