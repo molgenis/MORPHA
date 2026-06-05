@@ -153,86 +153,95 @@ map_data_points$population_name_code <- paste0(map_data_points$population_name, 
 # Plot using ggplot2 #
 ######################
 
-col_oceans = "lightblue" #"#edf4f9"
-col_countries = "gray" #f2f2f2"
-col_borders = "black" # "#d9d9d9"
-col_legend_bg = "#ffffffcc"
-col_legend_border = "#d9d9d9"
 
-# legend tucked into the lower right corner
-plot_mean_WT_Energy <- ggplot() +
-  # Base Layer: A subtle, neutral background of world borders
-  geom_polygon(data = world_map, aes(x = long, y = lat, group = group), 
-               fill = col_countries, color = col_borders, linewidth = 0.2) +
+make_world_plot <- function(main_title, sub_title, legend_title, variable_name, save_file_name)
+{
   
-  # Diversity Layer: Points representing distinct ethnic cohorts
-  geom_point(data = map_data_points, 
-             aes(x = longitude, y = latitude, color = population_name_code, size = mean_WT_Energy),
-             alpha = 0.9) +
-  #geom_label(data = map_data_points, 
-  #          aes(x = longitude, y = latitude, label = population_code), 
-  #          size = 2, fontface = "bold", color = "black") +
-  geom_label_repel(
-    data = map_data_points, 
-    aes(x = longitude, y = latitude, label = population_code), 
-    size = 2.2, 
-    fontface = "bold", 
-    color = "black",
-    fill = "#ffffffb3",          # Solid-ish white background box for readability
-    
-    # --- LINE FORCE PARAMETERS ---
-    min.segment.length = 0,      # FIX: Forces lines to ALWAYS draw even if very short
-    segment.size = 0.3,          # FIX: Replaced segment.linewidth to support your version
-    segment.color = "gray20",    # Dark gray lines look cleaner than stark black lines
-    
-    # --- PADDING AND DISTANCE ---
-    box.padding = 0.6,           # Pushes the labels a bit further out to give the lines room to breathe
-    point.padding = 0.4,         # Keeps the line from touching the very center of the circle
-    force = 8,                   # Increases the push away strength to display clear lines
-    max.overlaps = Inf
-  )+
+  col_oceans = "lightblue" #"#edf4f9"
+  col_countries = "gray" #f2f2f2"
+  col_borders = "black" # "#d9d9d9"
+  col_legend_bg = "#ffffffcc"
+  col_legend_border = "#d9d9d9"
   
-  # Aesthetics and scaling
-  scale_size_continuous(range = c(3, 8), name = "Folding energy ΔG (kJ/mol)") +
-  scale_color_viridis_d(option = "turbo") +
-  
-  labs(
-    title = "1000 Genomes Project Sample Populations",
-    subtitle = "Visualizing sub-national regional and ethnic distribution",
-    x = "Longitude", y = "Latitude",
-    color = "Specific Population / Ethnicity"
-  ) +
-  
-  # Set explicit layout order for the legends ---
-  # Mean energy gets order = 1 (Left), Population gets order = 2 (Right)
-  guides(
-    size = guide_legend(order = 1),
-    color = guide_legend(ncol = 2, order = 2, override.aes = list(size = 3))
-  ) +
-  
-  theme_minimal() +
-  theme(
-    panel.background = element_rect(fill = col_oceans, color = "black"),
-    legend.title = element_text(size = 9, face = "bold"),
-    legend.text = element_text(size = 7),
-    legend.key.height = unit(0.25, "cm"),
-    legend.key.spacing.y = unit(0.02, "cm"),
+  # legend tucked into the lower right corner
+  plot_mean_WT_Energy <- ggplot() +
+    # Base Layer: A subtle, neutral background of world borders
+    geom_polygon(data = world_map, aes(x = long, y = lat, group = group), 
+                 fill = col_countries, color = col_borders, linewidth = 0.2) +
     
-    # Positioning the main container inside the lower right
-    legend.position = "inside",              
-    legend.position.inside = c(0.99, 0.01),   
-    legend.justification = c(1, 0),          
+    # Diversity Layer: Points representing distinct ethnic cohorts
+    geom_point(data = map_data_points, 
+               aes(x = longitude, y = latitude, color = population_name_code, size = {{variable_name}}),
+               alpha = 0.9) +
+    #geom_label(data = map_data_points, 
+    #          aes(x = longitude, y = latitude, label = population_code), 
+    #          size = 2, fontface = "bold", color = "black") +
+    geom_label_repel(
+      data = map_data_points, 
+      aes(x = longitude, y = latitude, label = population_code), 
+      size = 2.2, 
+      fontface = "bold", 
+      color = "black",
+      fill = "#ffffffb3",          # Solid-ish white background box for readability
+      
+      # --- LINE FORCE PARAMETERS ---
+      min.segment.length = 0,      # FIX: Forces lines to ALWAYS draw even if very short
+      segment.size = 0.3,          # FIX: Replaced segment.linewidth to support your version
+      segment.color = "gray20",    # Dark gray lines look cleaner than stark black lines
+      
+      # --- PADDING AND DISTANCE ---
+      box.padding = 0.6,           # Pushes the labels a bit further out to give the lines room to breathe
+      point.padding = 0.4,         # Keeps the line from touching the very center of the circle
+      force = 8,                   # Increases the push away strength to display clear lines
+      max.overlaps = Inf
+    )+
     
-    # Arrange distinct legend boxes horizontally side-by-side
-    legend.box = "horizontal",               # Places size and color scales next to each other
-    legend.box.just = "bottom",              # Aligns their bottom baselines cleanly
+    # Aesthetics and scaling
+    scale_size_continuous(range = c(3, 8), name = legend_title) +
+    scale_color_viridis_d(option = "turbo") +
     
-    # Styling background box
-    legend.background = element_rect(fill = col_legend_bg, color =col_legend_border, linewidth = 0.2),
-    legend.margin = margin(6, 6, 6, 6)       
-  )
+    labs(
+      title = main_title,
+      subtitle = sub_title,
+      x = "Longitude", y = "Latitude",
+      color = "Specific Population / Ethnicity"
+    ) +
+    
+    # Set explicit layout order for the legends ---
+    # Mean energy gets order = 1 (Left), Population gets order = 2 (Right)
+    guides(
+      size = guide_legend(order = 1),
+      color = guide_legend(ncol = 2, order = 2, override.aes = list(size = 3))
+    ) +
+    
+    theme_minimal() +
+    theme(
+      panel.background = element_rect(fill = col_oceans, color = "black"),
+      legend.title = element_text(size = 9, face = "bold"),
+      legend.text = element_text(size = 7),
+      legend.key.height = unit(0.25, "cm"),
+      legend.key.spacing.y = unit(0.02, "cm"),
+      
+      # Positioning the main container inside the lower right
+      legend.position = "inside",              
+      legend.position.inside = c(0.99, 0.01),   
+      legend.justification = c(1, 0),          
+      
+      # Arrange distinct legend boxes horizontally side-by-side
+      legend.box = "horizontal",               # Places size and color scales next to each other
+      legend.box.just = "bottom",              # Aligns their bottom baselines cleanly
+      
+      # Styling background box
+      legend.background = element_rect(fill = col_legend_bg, color =col_legend_border, linewidth = 0.2),
+      legend.margin = margin(6, 6, 6, 6)       
+    )
+  
+  ggsave(filename=save_file_name, plot = plot_mean_WT_Energy, bg = "white", width = 10, height = 6.5)
+  
+}
 
-ggsave(filename="plot_mean_WT_Energy.png", plot = plot_mean_WT_Energy, bg = "white", width = 10, height = 6.5)
+make_world_plot("1000 Genomes Project Sample Populations", "Visualizing sub-national regional and ethnic distribution", "Folding energy ΔG (kJ/mol)", mean_WT_Energy, "plot_mean_WT_Energy.png")
+make_world_plot("bla", "bla", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_917511, "mean_ClinVar_917511.png")
 
 
 
