@@ -178,7 +178,7 @@ make_world_plot <- function(main_title, sub_title, legend_title, variable_name, 
     #          size = 2, fontface = "bold", color = "black") +
     geom_label_repel(
       data = map_data_points, 
-      aes(x = longitude, y = latitude, label = population_code), 
+      aes(x = longitude, y = latitude, label = paste0(population_code, " ", round({{variable_name}}))), 
       size = 2.2, 
       fontface = "bold", 
       color = "black",
@@ -241,13 +241,15 @@ make_world_plot <- function(main_title, sub_title, legend_title, variable_name, 
 }
 
 make_world_plot("1000 Genomes Project Sample Populations", "Visualizing sub-national regional and ethnic distribution", "Folding energy ΔG (kJ/mol)", mean_WT_Energy, "plot_mean_WT_Energy.png")
-make_world_plot("bla", "bla", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_917511, "mean_ClinVar_917511.png")
+make_world_plot("todo", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_917511, "mean_ClinVar_917511.png")
+make_world_plot("todo", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_430715, "mean_ClinVar_430715.png")
+make_world_plot("todo", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_449657, "mean_ClinVar_449657.png")
 
 
 
-# ======= DENSITY PLOT ======= #
 
 
+# ======= SUPERPOPULATION MAPPING ======= #
 
 pop_lookup <- tibble(
   population_code = c(
@@ -273,17 +275,16 @@ pop_lookup <- tibble(
   )
 )
 
-# ==============================================================================
-# STEP 2: Map the Lookup Table to your Raw, Unaggregated Data
-# ==============================================================================
+
+# ======= DENSITY PLOT ======= #
+
+#  Map the Lookup Table to your Raw, Unaggregated Data
 # Assuming 'merged_df' is your haplotype-level data frame containing 'Total_Energy' 
 # and 'population_code' columns.
 plot_data <- samples_quant %>%
   left_join(pop_lookup, by = "population_code")
 
-# ==============================================================================
-# STEP 3: Generate the Comparative Density Plot
-# ==============================================================================
+# Generate the Comparative Density Plot
 ggplot(plot_data, aes(x = ClinVar_917511, fill = superpopulation_name, color = superpopulation_name)) +
   # Add geom_density with transparency (alpha) so overlapping distributions are visible
   geom_density(alpha = 0.35, linewidth = 0.7) +
@@ -315,3 +316,82 @@ ggplot(plot_data, aes(x = ClinVar_917511, fill = superpopulation_name, color = s
 
 
 
+# ======= HEATMAP ======= #
+
+# 1. Isolate the population code and the specific 'mean' columns you want
+library(pheatmap)
+heatmap_data <- pop_quant %>%
+  select(
+    population_code,
+    mean_WT_Energy,
+    mean_ClinVar_917511, 
+    mean_ClinVar_430715, 
+    mean_ClinVar_449657, 
+    mean_ClinVar_2550, 
+    mean_ClinVar_966299, 
+    mean_ClinVar_971850, 
+    mean_ClinVar_1179060
+  )
+
+# Clean up column names for the plot display (e.g., "mean_ClinVar_917511" -> "ClinVar 917511")
+colnames(heatmap_data) <- gsub("mean_ClinVar_", "ClinVar ", colnames(heatmap_data))
+
+# Convert the data frame into a matrix with population_code as row names
+heatmap_matrix <- heatmap_data %>%
+  tibble::column_to_rownames("population_code") %>%
+  as.matrix()
+
+
+# PREPARE THE METADATA ANNOTATION DATA FRAME
+# Filter lookup down to only the populations currently present in your matrix rows
+annotation_df <- pop_lookup %>%
+  filter(population_code %in% rownames(heatmap_matrix)) %>%
+  select(population_code, Superpopulation = superpopulation_code) %>%
+  # pheatmap strictly requires metadata to be a data frame with matching row names
+  tibble::column_to_rownames("population_code") %>%
+  as.data.frame()
+
+# DEFINE EXPLICIT COLORS FOR THE SUPERPOPULATIONS (Optional but recommended)
+annotation_colors <- list(
+  Superpopulation = c(
+    EAS = "#7FC97F", # Soft Green
+    EUR = "#BEAED4", # Soft Purple
+    AFR = "#FDC086", # Soft Orange
+    AMR = "#FFFF99", # Soft Yellow
+    SAS = "#386CB0"  # Soft Blue
+  )
+)
+
+# GENERATE ANNOTATED HEATMAP
+pheatmap(
+  mat = heatmap_matrix,
+  scale = "column",
+  
+  # Clustering logic
+  clustering_distance_rows = "euclidean",
+  clustering_distance_cols = "euclidean",
+  clustering_method = "complete",
+  
+  # Row Annotations & Colors
+  annotation_row = annotation_df,
+  annotation_colors = annotation_colors,
+  
+  # Cell numbers display logic (Original raw values)
+  display_numbers = round(heatmap_matrix, 2),
+  number_color = "black",
+  fontsize_number = 9,
+  
+  # Aesthetics & Background configuration
+  color = colorRampPalette(c("#313695", "#f7f7f7", "#a50026"))(50), 
+  border_color = "white",       
+  background_color = "white",   
+  
+  # Labels and titles
+  main = "Population vs Mutation Effects\n(Color Gradient: Column Z-Score | Text: Raw DDG)",
+  angle_col = 45,
+  
+  # filename and dimensions here
+  filename = "superpop_mutation_heatmap.png",
+  width = 10,
+  height = 6.5
+)
