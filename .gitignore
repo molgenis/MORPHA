@@ -9,3 +9,10 @@ data
 
 # Tmp folder
 tmp
+
+# folded protein models and FoldX results
+*.pdb
+*.fxout
+
+# plots
+*.png
