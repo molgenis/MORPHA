@@ -241,11 +241,13 @@ make_world_plot <- function(main_title, sub_title, legend_title, variable_name, 
 }
 
 make_world_plot("1000 Genomes Project Sample Populations", "Visualizing sub-national regional and ethnic distribution", "Folding energy ΔG (kJ/mol)", mean_WT_Energy, "plot_mean_WT_Energy.png")
-make_world_plot("todo", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_917511, "mean_ClinVar_917511.png")
-make_world_plot("todo", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_430715, "mean_ClinVar_430715.png")
-make_world_plot("todo", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_449657, "mean_ClinVar_449657.png")
-
-
+make_world_plot("ClinVar_917511", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_917511, "mean_ClinVar_917511.png")
+make_world_plot("ClinVar_430715", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_430715, "mean_ClinVar_430715.png")
+make_world_plot("ClinVar_449657", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_449657, "mean_ClinVar_449657.png")
+make_world_plot("ClinVar_2550", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_917511, "mean_ClinVar_2550.png")
+make_world_plot("ClinVar_966299", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_430715, "mean_ClinVar_966299.png")
+make_world_plot("ClinVar_971850", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_449657, "mean_ClinVar_971850.png")
+make_world_plot("ClinVar_1179060", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_449657, "mean_ClinVar_1179060.png")
 
 
 
@@ -274,45 +276,6 @@ pop_lookup <- tibble(
     rep("South Asian Ancestry", 5)
   )
 )
-
-
-# ======= DENSITY PLOT ======= #
-
-#  Map the Lookup Table to your Raw, Unaggregated Data
-# Assuming 'merged_df' is your haplotype-level data frame containing 'Total_Energy' 
-# and 'population_code' columns.
-plot_data <- samples_quant %>%
-  left_join(pop_lookup, by = "population_code")
-
-# Generate the Comparative Density Plot
-ggplot(plot_data, aes(x = ClinVar_917511, fill = superpopulation_name, color = superpopulation_name)) +
-  # Add geom_density with transparency (alpha) so overlapping distributions are visible
-  geom_density(alpha = 0.35, linewidth = 0.7) +
-  
-  # Standard 1000 Genomes-style clean color palette
-  scale_fill_brewer(palette = "Set1") +
-  scale_color_brewer(palette = "Set1") +
-  
-  # Labeling
-  labs(
-    title = "Distribution of MEFV Structural Total Energy",
-    subtitle = "Global comparison across 1000 Genomes continental superpopulations",
-    x = "Total Energy (kcal/mol)",
-    y = "Density",
-    fill = "Superpopulation",
-    color = "Superpopulation"
-  ) +
-  
-  # Professional theme configurations
-  theme_minimal(base_size = 12) +
-  theme(
-    panel.grid.minor = element_blank(),
-    plot.title = element_text(face = "bold", size = 14),
-    plot.subtitle = element_text(color = "gray40", size = 11),
-    legend.position = "right",
-    legend.title = element_text(face = "bold")
-  )
-
 
 
 
@@ -394,4 +357,235 @@ pheatmap(
   filename = "superpop_mutation_heatmap.png",
   width = 10,
   height = 6.5
+)
+
+
+# =========================
+# INDIVIDUAL-LEVEL HEATMAP
+# =========================
+# Link the raw haplotype dataset to the ancestry lookup table
+indiv_data <- samples_quant %>%
+  left_join(pop_lookup, by = "population_code") %>%
+  filter(!is.na(superpopulation_code)) %>%
+  # Create a unique row identifier combining Sample and Haplotype designation
+  mutate(Haplotype_ID = paste0(Sample_name, "_", str_extract(Haplotype, "h[12]$")))
+
+# Convert to a pure numeric matrix for the heatmap grid
+indiv_matrix <- indiv_data %>%
+  select(
+    Haplotype_ID,
+    WT_Energy,
+    starts_with("ClinVar_")
+  ) %>%
+  tibble::column_to_rownames("Haplotype_ID") %>%
+  as.matrix()
+# Clean up column names for display
+colnames(indiv_matrix) <- gsub("ClinVar_", "ClinVar ", colnames(indiv_matrix))
+# This creates a tracking bar mapping every individual haplotype to its ancestry
+indiv_annotation <- indiv_data %>%
+  select(Haplotype_ID, Superpopulation = superpopulation_code) %>%
+  tibble::column_to_rownames("Haplotype_ID") %>%
+  as.data.frame()
+# Explicit colors for the ancestry tracker (matching your previous plots)
+annotation_colors <- list(
+  Superpopulation = c(
+    EAS = "#7FC97F", # Soft Green
+    EUR = "#BEAED4", # Soft Purple
+    AFR = "#FDC086", # Soft Orange
+    AMR = "#FFFF99", # Soft Yellow
+    SAS = "#386CB0"  # Soft Blue
+  )
+)
+pheatmap(
+  mat = indiv_matrix,
+  scale = "column", 
+  
+  # Clustering configuration
+  clustering_distance_rows = "euclidean",
+  clustering_distance_cols = "euclidean",
+  clustering_method = "complete",
+  
+  # Ancestry metadata tracking
+  annotation_row = indiv_annotation,
+  annotation_colors = annotation_colors,
+  
+  # Hide unreadable labels
+  show_rownames = FALSE,         
+  show_colnames = TRUE,
+  cluster_rows = TRUE,          
+  display_numbers = FALSE,
+  
+  # 1. Give NA cells a definitive color so they act as a clean canvas
+  na_col = "#EAEAEA", 
+  
+  # 2. Cap the gradient scale dynamically to force vibrant contrast
+  # This stops extreme outliers (-20 or +20) from washing out the entire plot
+  breaks = seq(-3, 3, length.out = 51), 
+  
+  # 3. Clean color ramp running from deep variant-suppressed to highly destabilized
+  color = colorRampPalette(c("#4575b4", "#f7f7f7", "#d73027"))(50), 
+  
+  # 4. Remove cell borders entirely so the data smoothly blends together
+  border_color = NA,            
+  background_color = "white",   
+  
+  # Labels and saving parameters
+  main = "Individual Haplotype Variant Profiles\n(Background Grid: Non-Carriers | Colored Blocks: Column Z-Score)",
+  angle_col = 45,
+  
+  filename = "individual_haplotype_heatmap_fixed.png",
+  width = 8,
+  height = 10                  
+)
+
+
+
+
+# ======= HEATMAP: Haplotype Counts by WT Energy Level for subpopulations ======= #
+
+# 1. Calculate haplotype counts per subpopulation at each WT Energy level
+heatmap_data <- samples_quant %>%
+  group_by(population_code, WT_Energy) %>%
+  summarise(haplotype_count = n(), .groups = "drop") %>%
+  # Pivot wider so WT energy levels become columns (X-axis)
+  pivot_wider(
+    names_from = WT_Energy, 
+    values_from = haplotype_count, 
+    values_fill = 0
+  )
+# 2. Convert the data frame into a matrix with population_code as row names
+heatmap_matrix <- heatmap_data %>%
+  tibble::column_to_rownames("population_code") %>%
+  as.matrix()
+# 3. Sort column names numerically so the X-axis scales cleanly if needed
+heatmap_matrix <- heatmap_matrix[, order(as.numeric(colnames(heatmap_matrix)))]
+# PREPARE THE METADATA ANNOTATION DATA FRAME
+annotation_df <- pop_lookup %>%
+  filter(population_code %in% rownames(heatmap_matrix)) %>%
+  select(population_code, Superpopulation = superpopulation_code) %>%
+  tibble::column_to_rownames("population_code") %>%
+  as.data.frame()
+# DEFINE EXPLICIT COLORS FOR THE SUPERPOPULATIONS
+annotation_colors <- list(
+  Superpopulation = c(
+    EAS = "#7FC97F", # Soft Green
+    EUR = "#BEAED4", # Soft Purple
+    AFR = "#FDC086", # Soft Orange
+    AMR = "#FFFF99", # Soft Yellow
+    SAS = "#386CB0"  # Soft Blue
+  )
+)
+# 1. Find the maximum raw value in your matrix to anchor the top of the scale
+max_val <- max(heatmap_matrix, na.rm = TRUE)
+palette_length <- 100
+# 2. Build a smooth, expanded warm color palette
+heatmap_colors <- colorRampPalette(c("#ffffff", "#ffe5cc", "#fdd49e", "#fdbb84", "#fc8d59", "#ef6548", "#d7301f", "#7f0000"))(palette_length)
+# 3. Create non-linear breaks using a square-root curve.
+# This forces multiple distinct color changes down between 0 and 10, 
+# while letting the huge 300+ counts share the deep red colors at the top.
+heatmap_breaks <- seq(0, max_val^(1/2), length.out = palette_length + 1)^2
+# GENERATE CLEANED COUNT HEATMAP WITH RAW VALUES AND COMPRESSED COLOR SCALE
+pheatmap(
+  mat = heatmap_matrix,   # Using the raw, untouched matrix values
+  scale = "none",         # No mathematical transformation of the data
+  
+  # Clustering logic (retained per your preference)
+  cluster_rows = TRUE,
+  cluster_cols = FALSE,
+  clustering_distance_rows = "euclidean",
+  clustering_distance_cols = "euclidean",
+  clustering_method = "complete",
+  
+  # Row Annotations & Colors
+  annotation_row = annotation_df,
+  annotation_colors = annotation_colors,
+  
+  # Inject the custom color-compression arrays
+  color = heatmap_colors,
+  breaks = heatmap_breaks,
+  
+  # Structural formatting
+  display_numbers = FALSE,
+  border_color = NA,  
+  
+  # Labels and titles
+  main = "Haplotype Count per Subpopulation by WT Energy Level\n(Color Scale Compressed to Highlight Lower Ranges 1-10)",
+  
+  angle_col = 90,
+  fontsize_col = 6,   
+  fontsize_row = 9,   
+  
+  # Output file settings
+  filename = "wt_energy_counts_heatmap_compressed.png",
+  width = 12,
+  height = 7
+)
+
+
+
+# ======= HEATMAP: Haplotype Counts by WT Energy Level for superpopulations ======= #
+
+# 1. Map subpopulations to superpopulations, then count haplotypes
+heatmap_data <- samples_quant %>%
+  left_join(pop_lookup, by = "population_code") %>%
+  group_by(superpopulation_name, WT_Energy) %>% # Using full names for cleaner row labels
+  summarise(haplotype_count = n(), .groups = "drop") %>%
+  # Pivot wider so WT energy levels become columns (X-axis)
+  pivot_wider(
+    names_from = WT_Energy, 
+    values_from = haplotype_count, 
+    values_fill = 0
+  )
+
+# 2. Convert into a matrix with superpopulation_name as row names
+heatmap_matrix <- heatmap_data %>%
+  tibble::column_to_rownames("superpopulation_name") %>%
+  as.matrix()
+
+# 3. Sort column names numerically (X-axis)
+heatmap_matrix <- heatmap_matrix[, order(as.numeric(colnames(heatmap_matrix)))]
+
+# Find the new maximum value (binned superpopulation numbers will be larger)
+max_val <- max(heatmap_matrix, na.rm = TRUE)
+palette_length <- 100
+
+# Expanded warm color palette
+heatmap_colors <- colorRampPalette(c("#ffffff", "#ffe5cc", "#fdd49e", "#fdbb84", "#fc8d59", "#ef6548", "#d7301f", "#7f0000"))(palette_length)
+
+# Dynamic square-root breaks adjusted to the new superpopulation data volume
+heatmap_breaks <- seq(0, max_val^(1/2), length.out = palette_length + 1)^2
+
+# GENERATE SUPERPOPULATION COUNT HEATMAP
+pheatmap(
+  mat = heatmap_matrix,   # Matrix now has 5 rows instead of 26
+  scale = "none",         
+  
+  # Clustering logic
+  cluster_rows = TRUE,
+  cluster_cols = FALSE,
+  clustering_distance_rows = "euclidean",
+  clustering_distance_cols = "euclidean",
+  clustering_method = "complete",
+  
+  # Removed annotation_row & annotation_colors because rows are now the superpopulations!
+  
+  # Inject the custom color-compression arrays
+  color = heatmap_colors,
+  breaks = heatmap_breaks,
+  
+  # Structural formatting
+  display_numbers = FALSE,
+  border_color = NA,  
+  
+  # Labels and titles
+  main = "Haplotype Count per Superpopulation by WT Energy Level\n(Color Scale Compressed to Highlight Lower Ranges)",
+  
+  angle_col = 90,
+  fontsize_col = 6,   
+  fontsize_row = 10,   # Boosted row font size slightly since there is more room now
+  
+  # Output file settings (Height reduced to 4.5 because 5 rows need less vertical space)
+  filename = "superpop_energy_counts_heatmap.png",
+  width = 12,
+  height = 4.5
 )
