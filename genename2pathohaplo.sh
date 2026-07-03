@@ -1,23 +1,24 @@
 #!/bin/bash
 
-
-[ -z "$1" ] && { echo "Missing argument: gene name"; exit 1; }
+# Check for required arguments
+if [ -z "$1" ] || [ -z "$2" ]; then
+    echo "Usage: $0 <gene name> <pathovariants local vcf.gz>"
+    exit 1
+fi
 
 GENE=$1
+PATHOVARIANTSLOCAL=$2
 
 echo "Starting script with gene name = ${GENE}"
+echo "Using pathovariants local file = ${PATHOVARIANTSLOCAL}"
 
 DATADIR=data
 TMPDIR=tmp
 GENEDIR="${TMPDIR}/${GENE}"
 SAMPLENAMES="1kGP_sample_names.txt"
-CLINVARGENE="${GENEDIR}/ClinVarPathogenic"
-CLINVARGENELOCAL="${CLINVARGENE}.local.vcf.gz"
 GENESAMPLESHAPLODIR="${GENEDIR}/samples"
 GENESAMPLESPATHODIR="${GENEDIR}/samples_patho"
 mkdir -p "${GENESAMPLESPATHODIR}"
-
-
 
 localize_chain() {
     local GLOBAL_CHAIN=$1
@@ -50,7 +51,7 @@ localize_chain() {
 
 
 
-bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "$CLINVARGENELOCAL" | while read -r variant; do
+bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read -r variant; do
 
     # DEBUG
     #variant="chr16:1379:TAC"
@@ -69,7 +70,7 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "$CLINVARGENELOCAL" | while read -r v
     SINGLE_VAR_TMP_VCF="${GENEDIR}/tmp_singlevar_${CHR_POS_ALT}.vcf.gz"
     if [ ! -s "${SINGLE_VAR_TMP_VCF}" ]; then
       echo "Creating ${SINGLE_VAR_TMP_VCF}..."
-      bcftools view -O z -i "POS==${POS} && ALT=='${ALT}'" "${CLINVARGENELOCAL}" > "${SINGLE_VAR_TMP_VCF}"
+      bcftools view -O z -i "POS==${POS} && ALT=='${ALT}'" "${PATHOVARIANTSLOCAL}" > "${SINGLE_VAR_TMP_VCF}"
       bcftools index "${SINGLE_VAR_TMP_VCF}"
     else
       echo "Skipping creation of ${SINGLE_VAR_TMP_VCF}..."
