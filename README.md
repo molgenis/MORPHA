@@ -6,7 +6,7 @@ Example run (in this order):
    - Using GRCh38 and 1000G data, reconstruct and group all 1KG haplotypes.
 2. `./genename2pathogenicvariants.sh <gene>`
    - Obtain all known pathogenic variants
-3. `./genename2pathohaplo.sh <gene>`
+3. `./genename2pathohaplo.sh <gene> <localized vcf.gz>`
    - Spike pathogenic variants into 1KG haplotypes and group them.
 4. `./genename2foldedhaplo <gene>`
    - Fold all unique haplotype proteins, 1KG and spiked.
@@ -86,3 +86,17 @@ sed -i 's/\r//' genename2pathogenicvariants.sh
 sed -i 's/\r//' genename2pathohaplo.sh
 sed -i 's/\r//' genename2foldedhaplo.sh
 ```
+
+# MEFV pathogenic variants from INFEVERS (instead of ClinVar)
+- Download TSV from https://infevers.umai-montpellier.fr/web/download.php?n=1
+- Filter lines if needed (i.e. select only "Pathogenic", "Benign", etc)
+- Grab cDNA and format variants like this: NM_000243.3:c.724A>G
+- Run variants through VEP at https://www.ensembl.org/Homo_sapiens/Tools/VEP/
+- Download result as VCF
+- Get genome start coordinate from MEFV MANE GFF, line containing 'transcript', transcript_start = 3242027
+- Calculate and replace by local start coordinates: genomic_start - transcript_start + 1
+- Replace chromosome '16' by 'chr16'
+- Remove 'NM_000243.3:' from ID field
+- Compress: `bgzip -c MEFV-infevers-pathogenic-local.vcf > MEFV-infevers-pathogenic-local.vcf.gz`
+- Index: `tabix -p vcf MEFV-infevers-pathogenic-local.vcf.gz`
+- Run haplotype builder with these variants:  `./genename2pathohaplo.sh MEFV /path/to/MEFV-infevers-pathogenic-local.vcf.gz`
