@@ -1,0 +1,21 @@
+##fileformat=VCFv4.1
+##INFO=<ID=CLF,Number=.,Type=String,Description="INFEVERS classification">
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+chr16	1179	c.2282G>A	C	T	.	.	CLF=P
+chr16	1284	c.2177T>C	A	G	.	.	CLF=P
+chr16	1377	c.2081_2083del	TTCA	T	.	.	CLF=P
+chr16	1379	c.2082G>A	C	T	.	.	CLF=P
+chr16	1381	c.2080A>G	T	C	.	.	CLF=P
+chr16	1382	c.2076_2078del	CATT	C	.	.	CLF=P
+chr16	1421	c.2040G>A	C	T	.	.	CLF=P
+chr16	1421	c.2040G>C	C	G	.	.	CLF=P
+chr16	2239	c.1748A>C	T	G	.	.	CLF=P
+chr16	2257	c.1730C>A	G	T	.	.	CLF=P
+chr16	5118	c.1459G>C	C	G	.	.	CLF=B
+chr16	5140	c.1437C>G	G	C	.	.	CLF=P
+chr16	6921	c.1318C>G	G	C	.	.	CLF=B
+chr16	7679	c.986G>A	C	T	.	.	CLF=B
+chr16	12132	c.910G>A	C	T	.	.	CLF=B
+chr16	12318	c.724A>G	T	C	.	.	CLF=P
+chr16	12354	c.688G>A	C	T	.	.	CLF=B
+chr16	12456	c.586G>T	C	A	.	.	CLF=B
