@@ -29,10 +29,15 @@ for FASTA_FILE in "${NORMALHAPLO}" "${PATHHAPLO}"; do
     echo "================================================================="
 
     awk '
-    BEGIN { RS = ">" }
-    NR > 1 {
-        # 1. Isolate the header line from the sequence block
+    # Split on > if it is at the start of the file (^) OR preceded by a newline (\n)
+    BEGIN { RS = "(\n|^)>" }
+    NR >= 1 {
+        # Clean any Windows carriage returns
+        gsub(/\r/, "", $0)
+
+        # Separate the header line from the sequence block
         nl_pos = index($0, "\n")
+        if (nl_pos == 0) next
         full_header = substr($0, 1, nl_pos - 1)
         seq = substr($0, nl_pos + 1)
 
@@ -52,11 +57,11 @@ for FASTA_FILE in "${NORMALHAPLO}" "${PATHHAPLO}"; do
         }
 
         # 4. Stream to the while loop
-        if (length(seq) > 0) {
-            print clean_name "\t" seq
+        if (length(clean_name) > 0 && length(seq) > 0) {
+            print clean_name " " seq
         }
     }
-    ' "${FASTA_FILE}" | while IFS=$'\t' read -r VARIANT_NAME AMINO_ACIDS; do
+    ' "${FASTA_FILE}" | while read -r VARIANT_NAME AMINO_ACIDS; do
 
         [ -z "$VARIANT_NAME" ] && continue
 
