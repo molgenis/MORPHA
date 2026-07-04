@@ -8,7 +8,7 @@ Example run (in this order):
    - Obtain all known pathogenic variants
 3. `./genename2pathohaplo.sh <gene> <localized vcf.gz>`
    - Spike pathogenic variants into 1KG haplotypes and group them.
-4. `./genename2foldedhaplo <gene>`
+4. `./genename2foldedhaplo.sh <gene>`
    - Fold all unique haplotype proteins, 1KG and spiked.
    - Expects [esmfold-server](https://github.com/joerivandervelde/esmfold-server) to run on your network, default address http://192.168.2.9:8000, adjust accordingly.
 5. Merge haplotype data with IGSR sample metadata
