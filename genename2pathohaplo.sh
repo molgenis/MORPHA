@@ -6,8 +6,8 @@ if [ -z "$1" ] || [ -z "$2" ]; then
     exit 1
 fi
 
-GENE=$1
-PATHOVARIANTSLOCAL=$2
+GENE=$1 #e.g. "MEFV"
+PATHOVARIANTSLOCAL=$2 #e.g. "results/MEFV/infevers/MEFV-infevers-one-inframedel.vcf.gz"
 
 echo "Starting script with gene name = ${GENE}"
 echo "Using pathovariants local file = ${PATHOVARIANTSLOCAL}"
@@ -54,7 +54,7 @@ localize_chain() {
 bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read -r variant; do
 
     # DEBUG
-    #variant="chr16:1379:TAC"
+    #variant="chr16:1377:c.2081_2083del:T" # --> VCF variant "chr16	1377	c.2081_2083del	TTCA	T" causes exon 10 drop in CrossMap GFF liftover, so good test
 
     # Isolate the position, chromosome and alternative allele
     # NOTE: we assume 1 alt per line, check if this is really true!!
@@ -103,7 +103,7 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
               exit 1
             fi
 
-            # Temporarily simplify your FASTA header so it says ">chr16" instead of ">chr16:3242..."
+            # Temporarily simplify FASTA header so it says ">chr16" instead of ">chr16:3242..."
             # to enable bcftools consensus matching of VCF and FASTA
             ORIGINALSAMPLEFAHEADER=$(grep ">" "${ORIGINALSAMPLEFA}" | head -n 1)
             echo "Extracted original FASTA header: ${ORIGINALSAMPLEFAHEADER}"
@@ -156,7 +156,7 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
             fi
 
 
-            # run consensus
+            # run consensus to create FA file with pathogenic variant
             SAMPLEPATHCHAIN="${PREFIX_PTH}.${CHR_POS_ALT}.chain"
             SAMPLEPATHFA="${PREFIX_PTH}.${CHR_POS_ALT}.fa"
 
@@ -175,6 +175,7 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
                exit 1
             fi
 
+            # now also need to lift GFF files, first create tmp GFF and then do liftover
             HAPLIFTEDSAMPLEGFF="${PREFIX_HAP}.lifted.local.MANE.GRCh38.v1.3.ensembl_genomic.gff"
             CHROMRENAME_HAPLIFTEDSAMPLEGFF="${PREFIX_PTH}.lifted.local.chromrename.MANE.GRCh38.v1.3.ensembl_genomic.gff"
 
@@ -196,13 +197,12 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
               exit 1
             fi
 
-            # then perform liftover to pathogenic variant coordinates
+            # now perform liftover to pathogenic variant coordinates - cannot use CrossMap here, it does not handle indels correctly!
             PATHOLIFTEDSAMPLEGFF="${PREFIX_PTH}.patholifted.local.MANE.GRCh38.v1.3.ensembl_genomic.gff"
-            #echo "Running CrossMap: CrossMap gff ${SAMPLEPATHCHAIN} ${CHROMRENAME_HAPLIFTEDSAMPLEGFF} ${PATHOLIFTEDSAMPLEGFF}"
-            CrossMap gff \
-              "${SAMPLEPATHCHAIN}" \
-              "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}" \
-              "${PATHOLIFTEDSAMPLEGFF}"
+            ./project_gff_by_chain_preserve_features.py \
+                "${SAMPLEPATHCHAIN}" \
+                "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}" \
+                "${PATHOLIFTEDSAMPLEGFF}"
 
             # translate to CDS and protein:
             echo "Now translating to protein"

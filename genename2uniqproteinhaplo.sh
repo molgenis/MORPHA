@@ -205,7 +205,12 @@ while read -r SAMPLE; do
         fi
         echo "Creating lifted GFF for sample=${SAMPLE}, haplotype=${H}..."
         echo "cmd used: CrossMap gff ${PREFIX}.chain ${GENEDIR}/${GRCh38MANEGFF} ${LIFTEDMANE}"
-        CrossMap gff "${PREFIX}.chain" "${GENEDIR}/${GRCh38MANEGFF}" "${LIFTEDMANE}"
+        #CrossMap gff "${PREFIX}.chain" "${GENEDIR}/${GRCh38MANEGFF}" "${LIFTEDMANE}" --> may fail on indels, replaced with below!!
+        ./project_gff_by_chain_preserve_features.py \
+            "${PREFIX}.chain" \
+            "${GENEDIR}/${GRCh38MANEGFF}" \
+            "${LIFTEDMANE}"
+
         if [[ ! -s "${LIFTEDMANE}" ]]; then
             echo "Error: File ${LIFTEDMANE} not found or empty."
             exit 1
