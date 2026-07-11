@@ -70,7 +70,7 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
     SINGLE_VAR_TMP_VCF="${GENEDIR}/tmp_singlevar_${CHR_POS_ALT}.vcf.gz"
     if [ ! -s "${SINGLE_VAR_TMP_VCF}" ]; then
       echo "Creating ${SINGLE_VAR_TMP_VCF}..."
-      bcftools view -O z -i "POS==${POS} && ALT=='${ALT}'" "${PATHOVARIANTSLOCAL}" > "${SINGLE_VAR_TMP_VCF}"
+      bcftools view -O z -i "CHROM=='${CHROM}' && POS==${POS} && ID=='${ID}' && ALT=='${ALT}'" "${PATHOVARIANTSLOCAL}" > "${SINGLE_VAR_TMP_VCF}"
       bcftools index "${SINGLE_VAR_TMP_VCF}"
     else
       echo "Skipping creation of ${SINGLE_VAR_TMP_VCF}..."
@@ -84,6 +84,10 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
     while read -r SAMPLE; do
         [ -z "$SAMPLE" ] && continue # skip empty lines
         for H in 1 2; do
+
+          # debug
+          # SAMPLE="HG00663"
+          # H="2"
 
             echo "Going to work on sample: ${SAMPLE}.h${H}"
             PREFIX_HAP="${GENESAMPLESHAPLODIR}/${SAMPLE}.h${H}"
@@ -143,6 +147,43 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
               echo "File ${LIFTOVER_SINGLE_VAR_TMP_VCF} missing or empty for ${SAMPLE} h${H}."
               exit 1
             fi
+
+            # if ALT is equal to haplotype base (e.g. non-reference, variant already present in sample)
+            # we want to flag as no-op
+            NOOP=1
+            if awk -F'\t' '
+                BEGIN {
+                    found = 0
+                    valid = 0
+                }
+
+                !/^#/ {
+                    found = 1
+                    ref = $4
+                    alt = $5
+
+                    if (ref != "" && ref != "." &&
+                        alt != "" && alt != "." &&
+                        ref != alt) {
+                        valid = 1
+                    }
+
+                    exit
+                }
+
+                END {
+                    exit !(found && valid)
+                }
+            ' "${LIFTOVER_SINGLE_VAR_TMP_VCF}"; then
+                NOOP=0
+            fi
+            if [ "${NOOP}" -eq 1 ]; then
+                echo "REF/ALT invalid, missing, or identical; treating as no-op."
+            else
+                echo "REF and ALT are present and different; applying variant."
+            fi
+
+            # create GZ and index regardless for consistency
             if [ ! -s "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz" ]; then
               echo "Creating ${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz..."
               bgzip -c "${LIFTOVER_SINGLE_VAR_TMP_VCF}" > "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz"
@@ -160,19 +201,25 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
             SAMPLEPATHCHAIN="${PREFIX_PTH}.${CHR_POS_ALT}.chain"
             SAMPLEPATHFA="${PREFIX_PTH}.${CHR_POS_ALT}.fa"
 
-            if [[ ! -s "${SAMPLEPATHCHAIN}" || ! -s "${SAMPLEPATHFA}" ]]; then
-                echo "Creating ${SAMPLEPATHCHAIN} and ${SAMPLEPATHFA} sequence consensus..."
-                bcftools consensus \
-                    -f "${RENAMEDHEADERSAMPLEFA}" \
-                    -c "${SAMPLEPATHCHAIN}" \
-                    "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz" \
-                    > "${SAMPLEPATHFA}"
+            # if noop, allele is already present, so sequence is unchanged
+            if [ "${NOOP}" -eq 1 ]; then
+                echo "No allele change - copying existing haplotype FASTA"
+                cp "${RENAMEDHEADERSAMPLEFA}" "${SAMPLEPATHFA}"
             else
-              echo "${SAMPLEPATHCHAIN} and ${SAMPLEPATHFA} present, skipping consensus..."
-            fi
-            if [[ ! -s "${SAMPLEPATHCHAIN}" || ! -s "${SAMPLEPATHFA}" ]]; then
-               echo "${SAMPLEPATHCHAIN} and/or ${SAMPLEPATHFA} are missing."
-               exit 1
+              if [[ ! -s "${SAMPLEPATHCHAIN}" || ! -s "${SAMPLEPATHFA}" ]]; then
+                  echo "Creating ${SAMPLEPATHCHAIN} and ${SAMPLEPATHFA} sequence consensus..."
+                  bcftools consensus \
+                      -f "${RENAMEDHEADERSAMPLEFA}" \
+                      -c "${SAMPLEPATHCHAIN}" \
+                      "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz" \
+                      > "${SAMPLEPATHFA}"
+              else
+                echo "${SAMPLEPATHCHAIN} and ${SAMPLEPATHFA} present, skipping consensus..."
+              fi
+              if [[ ! -s "${SAMPLEPATHCHAIN}" || ! -s "${SAMPLEPATHFA}" ]]; then
+                 echo "${SAMPLEPATHCHAIN} and/or ${SAMPLEPATHFA} are missing."
+                 exit 1
+              fi
             fi
 
             # now also need to lift GFF files, first create tmp GFF and then do liftover
@@ -199,16 +246,42 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
 
             # now perform liftover to pathogenic variant coordinates - cannot use CrossMap here, it does not handle indels correctly!
             PATHOLIFTEDSAMPLEGFF="${PREFIX_PTH}.patholifted.local.MANE.GRCh38.v1.3.ensembl_genomic.gff"
-            ./project_gff_by_chain_preserve_features.py \
-                "${SAMPLEPATHCHAIN}" \
-                "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}" \
-                "${PATHOLIFTEDSAMPLEGFF}"
+
+            # if noop, no liftover magic is needed, just reuse existing one
+            if [ "${NOOP}" -eq 1 ]; then
+                echo "No allele change - copying existing GFF"
+                cp "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}" "${PATHOLIFTEDSAMPLEGFF}"
+            else
+                ./project_gff_by_chain_preserve_features.py \
+                  "${SAMPLEPATHCHAIN}" \
+                  "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}" \
+                  "${PATHOLIFTEDSAMPLEGFF}"
+            fi
+
 
             # translate to CDS and protein:
             echo "Now translating to protein"
             SAMPLEPATH_CDS="${PREFIX_PTH}.${CHR_POS_ALT}.cds.fa"
             #echo "gffread ${PATHOLIFTEDSAMPLEGFF} -g ${PREFIX_PTH}.${CHR_POS_ALT}.renamed.fa -x ${PREFIX_PTH}.${CHR_POS_ALT}.cds.fa -y ${PREFIX_PTH}.${CHR_POS_ALT}.protein.fa -S"
             gffread "${PATHOLIFTEDSAMPLEGFF}" -g "${SAMPLEPATHFA}" -x "${SAMPLEPATH_CDS}" -y "${SAMPLEPATH_PROT}" -S
+
+
+            # validations
+            if [ ! -s "${SAMPLEPATH_PROT}" ]; then
+                echo "ERROR: gffread did not produce a protein for ${SAMPLE}.h${H}." >&2
+                exit 1
+            fi
+            PROTEIN_SEQUENCE=$(
+                awk '!/^>/ {
+                    gsub(/[[:space:]]/, "")
+                    printf "%s", toupper($0)
+                }' "${SAMPLEPATH_PROT}"
+            )
+            if [[ "${PROTEIN_SEQUENCE}" == *X* ]]; then
+                echo "ERROR: Protein contains X for ${SAMPLE}.h${H}, variant ${ID}." >&2
+                echo "Keeping intermediate files for debugging." >&2
+                exit 1
+            fi
 
             # need to clean up since we process so many samples x haplotypes x mutations, only keep protein file
             if [ -n "${SAMPLEPATH_CDS}" ] && [ -f "${SAMPLEPATH_CDS}" ]; then
