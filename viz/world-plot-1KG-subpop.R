@@ -62,23 +62,35 @@ wt_baselines <- samples_quant_long %>%
   filter(Origin == "WT") %>%
   select(Haplotype, WT_Energy = Total_Energy)
 
+# Count occurence of energy levels and get top one as reference value (assuming this is the WT/reference genome)
+wt_energy_counts <- wt_baselines %>% count(WT_Energy, name = "Count", sort = TRUE)
+head(wt_energy_counts)
+top_ref_energy <- wt_energy_counts[[1]][1]
+# ALTERNTIVE: Overall mean WT delta G energy across all haplotypes
+mean_WT_energy <- mean(wt_baselines$WT_Energy, na.rm = TRUE)
+# assign it here
+ref_energy <- top_ref_energy
+
 # Process and reshape the data frame based strictly on VariantID
 samples_quant <- samples_quant_long %>%
-  # Step A: Filter down to just the pathogenic rows
+  # Filter down to just the pathogenic rows (.. including Benign ..)
   filter(Origin == "PG") %>%
   
-  # Step B: Attach the correct WT background energy for this specific haplotype
+  # Attach the correct WT background energy for this specific haplotype
   left_join(wt_baselines, by = "Haplotype") %>%
   
-  # Step C: Calculate DDG using the individual's specific WT background
+  # Calculate DDG using the individual's specific WT background
   mutate(DDG = Total_Energy - WT_Energy) %>%
   
-  # Step D: Prefix the ClinVarID column headers so they are clear (e.g., ClinVar_917511)
+  # WT deviation from the global mean WT delta G
+  mutate(WT_diff = WT_Energy - ref_energy) %>%
+  
+  # Prefix the ClinVarID column headers so they are clear (e.g., ClinVar_917511)
   mutate(Column_Name = paste0("Variant_", VariantID)) %>%
   
-  # Step E: Pivot wider so each ClinVar ID gets its own column containing the DDG
+  # Pivot wider so each ClinVar ID gets its own column containing the DDG
   pivot_wider(
-    id_cols = c(Sample_name, Haplotype, WT_Energy, Sex, population_code, `Population name`),
+    id_cols = c(Sample_name, Haplotype, WT_Energy, WT_diff, Sex, population_code, `Population name`),
     names_from = Column_Name,
     values_from = DDG
   )
@@ -98,7 +110,7 @@ pop_quant <- samples_quant %>%
     
     # Apply summary statistics across WT_Energy AND all ClinVar columns dynamically
     across(
-      .cols = c(WT_Energy, starts_with("Variant_")),
+      .cols = c(WT_diff, starts_with("Variant_")), # used to be 'WT_Energy', now 'WT_diff' to be comparible to DDG values
       .fns = list(
         mean   = ~ mean(.x, na.rm = TRUE)
         #median = ~ median(.x, na.rm = TRUE),
@@ -249,7 +261,8 @@ make_world_plot <- function(main_title, sub_title, legend_title, variable_name, 
   
 }
 
-make_world_plot("1000 Genomes Project Sample Populations", "Visualizing sub-national regional and ethnic distribution", "Folding energy ΔG (kJ/mol)", mean_WT_Energy, "plot_mean_WT_Energy.png")
+# plot on world map!
+#make_world_plot("1000 Genomes Project Sample Populations", "Visualizing sub-national regional and ethnic distribution", "Folding energy ΔG (kJ/mol)", mean_WT_Energy, "plot_mean_WT_Energy.png")
 
 
 # ======= SUPERPOPULATION MAPPING ======= #
@@ -284,15 +297,13 @@ pop_lookup <- tibble(
 
 # 1. Isolate the population code and the specific 'mean' columns you want
 library(pheatmap)
+variant_columns <- paste0("mean_Variant_", variant_info$id)
 heatmap_data <- pop_quant %>%
   select(
     population_code,
-    mean_WT_Energy,
+    mean_WT_diff, # used to be 'mean_WT_Energy', now 'mean_WT_diff' to be comparible to DDG values
     all_of(variant_columns)
   )
-
-# Clean up column names for the plot display (e.g., "mean_ClinVar_917511" -> "ClinVar 917511")
-colnames(heatmap_data) <- gsub("mean_ClinVar_", "ClinVar ", colnames(heatmap_data))
 
 # Convert the data frame into a matrix with population_code as row names
 heatmap_matrix <- heatmap_data %>%
@@ -314,19 +325,16 @@ column_metadata <- tibble(
   mutate(
     # Special handling for the WT column
     label = if_else(
-      matrix_column == "mean_WT_Energy",
-      "WT",
+      matrix_column == "mean_WT_diff",
+      "Δhg38",
       coalesce(label, VariantID)
     ),
     classification = if_else(
-      matrix_column == "mean_WT_Energy",
-      "WT",
+      matrix_column == "mean_WT_diff",
+      "Δhg38",
       classification
     )
   )
-
-# Labels shown along the x-axis
-variant_labels <- column_metadata$label
 
 # Column annotation must have matrix column names as row names
 annotation_col <- column_metadata %>%
@@ -355,16 +363,27 @@ annotation_colors <- list(
   ),
   
   Classification = c(
-    WT = "grey60",
+    `Δhg38` = "grey60",
     Benign = "#2CA25F",
     Pathogenic = "#DE2D26"
   )
 )
 
+# compute breaks
+max_abs <- max(
+  abs(heatmap_matrix),
+  na.rm = TRUE
+)
+heatmap_breaks <- seq(
+  -max_abs,
+  max_abs,
+  length.out = 51
+)
+
 # GENERATE ANNOTATED HEATMAP
 pheatmap(
   mat = heatmap_matrix,
-  scale = "column",
+  scale = "none", # used to be column for within-variant compare, but can now compare all
   
   # Clustering logic
   clustering_distance_rows = "euclidean",
@@ -375,7 +394,7 @@ pheatmap(
   annotation_row = annotation_df,
   annotation_col = annotation_col,
   annotation_colors = annotation_colors,
-  labels_col = variant_labels,
+  labels_col = column_metadata$label,
   
   # Cell numbers display logic (Original raw values)
   display_numbers = round(heatmap_matrix, 2),
@@ -383,12 +402,15 @@ pheatmap(
   fontsize_number = 8,
   
   # Aesthetics & Background configuration
-  color = colorRampPalette(c("#313695", "#f7f7f7", "#a50026"))(50), 
+  color = colorRampPalette(c("#313695", "#f7f7f7", "#a50026"))(50),
+  breaks = heatmap_breaks,
+  
   border_color = "white",       
   background_color = "white",   
   
   # Labels and titles
   main = "Population vs Mutation Effects\n(Heatmap: column-wise Z-score | Text: Raw DDG)",
+  # "3201 individuals aggregated at haplotype level 6402 per sub-population"
   angle_col = 45,
   
   # filename and dimensions here
@@ -396,6 +418,13 @@ pheatmap(
   width = 10,
   height = 6.5
 )
+
+
+
+
+
+
+
 
 
 # =========================
