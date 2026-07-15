@@ -1,3 +1,8 @@
+# requires:
+# results/<gene>/<gene>_protein_haplotypes.fa -> produced by genename2uniqproteinhaplo.sh
+# results/<gene>/<gene>_protein_path_haplotypes.fa -> produced by genename2pathohaplo.sh
+# viz/igsr_samples.tsv -> static resource
+library(purrr)
 
 gene <- "MEFV"
 
@@ -30,9 +35,12 @@ parse_fasta <- function(file_path, variant_type) {
     samples_part <- str_match(header, "samples=([^|]+)")[, 2]
     haps <- unlist(str_split(samples_part, ","))
     
-    # NEW: Extract the ClinVarID trailing numeric value (e.g., ..._T.917511 -> 917511)
-    # If it's a WT variant without a ClinVar dot ID, it assigns NA safely.
-    clinvar_ids <- str_match(haps, "\\.(\\d+)$")[, 2]
+    # Extract the variant identifier after the haplotype prefix
+    # Returns NA when there is nothing after sample.h1/sample.h2 (e.g. for WT)
+    variant_ids <- str_match(
+      haps,
+      "^[^.]+\\.h[12]\\.(.+)$"
+    )[, 2]
     
     # Clean the haplotype names (e.g., 'NA18974.h1.chr16...' -> 'NA18974.h1')
     haps_clean <- str_match(haps, "^([^.]+\\.h[12])")[, 2]
@@ -41,7 +49,7 @@ parse_fasta <- function(file_path, variant_type) {
       Haplotype = haps_clean,
       Variant = variant_name,
       Origin = variant_type,
-      ClinVarID = clinvar_ids,
+      VariantID = variant_ids,
       stringsAsFactors = FALSE
     )
   })
@@ -83,10 +91,10 @@ if (length(unmapped_igsr) > 0) {
 # now merge with the master haplotype sheet
 final_df <- igsr_samples_expanded %>%
   left_join(all_variants, by = "Haplotype") %>%
-  select(Sample_name, Haplotype, Variant, Origin, ClinVarID)
+  select(Sample_name, Haplotype, Variant, Origin, VariantID)
 
 # reorder columns
-final_df <- final_df[, c("Sample_name", "Haplotype", "Variant", "Origin", "ClinVarID")]
+final_df <- final_df[, c("Sample_name", "Haplotype", "Variant", "Origin", "VariantID")]
 
 # save the output back in 'results' folder
 write.table(final_df, paste0("results/", gene, "/", gene, "_protein_haplotypes_matched_to_igsr.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)

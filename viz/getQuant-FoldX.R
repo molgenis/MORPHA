@@ -1,3 +1,7 @@
+# requires:
+# results/<gene>/<gene>_protein_haplotypes_matched_to_igsr.tsv -> produced by viz/merge_haplo_with_igsrmd.R
+# results/<gene>/folded/ <gene>_protein_path_variant_*_Repair_0_ST.fxout files -> produced in this case by FoldX5
+
 library(dplyr)
 library(readr)
 library(stringr)
@@ -46,7 +50,7 @@ updated_samples <- samples %>%
 
 # remove most columns
 updated_samples <- updated_samples %>%
-  select(Sample_name, Haplotype, Variant, Origin, ClinVarID, Total_Energy)
+  select(Sample_name, Haplotype, Variant, Origin, VariantID, Total_Energy)
 
 # 5. View your newly updated data frame
 head(updated_samples)

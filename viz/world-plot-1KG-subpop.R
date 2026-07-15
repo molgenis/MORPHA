@@ -1,3 +1,8 @@
+# requires:
+# results/<gene>/<gene>_protein_haplotypes_quant.tsv -> produced by viz/getQuant-FoldX.R
+# viz/igsr_samples.tsv -> static resource
+# results/<gene>/variant_info.tsv -> manually created
+
 library(dplyr)
 library(ggplot2)
 library(maps)
@@ -43,6 +48,10 @@ unmapped_samplesB
 samples_quant_long <- quant %>%
   left_join(samples, by = c("Sample_name" = "Sample name"))
 
+# Add variant info
+variant_info <- read.delim( paste0("results/", gene, "/", "variant_info.tsv"),  sep = "\t", check.names = FALSE)
+samples_quant_long <- samples_quant_long %>%
+  left_join(variant_info, by = c("VariantID" = "id"))
 
 ##########################################################################################
 # Pivot the data so that WT/pathogenic get their own columns and each row is a haplotype #
@@ -53,7 +62,7 @@ wt_baselines <- samples_quant_long %>%
   filter(Origin == "WT") %>%
   select(Haplotype, WT_Energy = Total_Energy)
 
-# Process and reshape the data frame based strictly on ClinVarID
+# Process and reshape the data frame based strictly on VariantID
 samples_quant <- samples_quant_long %>%
   # Step A: Filter down to just the pathogenic rows
   filter(Origin == "PG") %>%
@@ -65,7 +74,7 @@ samples_quant <- samples_quant_long %>%
   mutate(DDG = Total_Energy - WT_Energy) %>%
   
   # Step D: Prefix the ClinVarID column headers so they are clear (e.g., ClinVar_917511)
-  mutate(Column_Name = paste0("ClinVar_", ClinVarID)) %>%
+  mutate(Column_Name = paste0("Variant_", VariantID)) %>%
   
   # Step E: Pivot wider so each ClinVar ID gets its own column containing the DDG
   pivot_wider(
@@ -89,7 +98,7 @@ pop_quant <- samples_quant %>%
     
     # Apply summary statistics across WT_Energy AND all ClinVar columns dynamically
     across(
-      .cols = c(WT_Energy, starts_with("ClinVar_")),
+      .cols = c(WT_Energy, starts_with("Variant_")),
       .fns = list(
         mean   = ~ mean(.x, na.rm = TRUE)
         #median = ~ median(.x, na.rm = TRUE),
@@ -241,14 +250,6 @@ make_world_plot <- function(main_title, sub_title, legend_title, variable_name, 
 }
 
 make_world_plot("1000 Genomes Project Sample Populations", "Visualizing sub-national regional and ethnic distribution", "Folding energy ΔG (kJ/mol)", mean_WT_Energy, "plot_mean_WT_Energy.png")
-make_world_plot("ClinVar_917511", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_917511, "mean_ClinVar_917511.png")
-make_world_plot("ClinVar_430715", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_430715, "mean_ClinVar_430715.png")
-make_world_plot("ClinVar_449657", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_449657, "mean_ClinVar_449657.png")
-make_world_plot("ClinVar_2550", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_917511, "mean_ClinVar_2550.png")
-make_world_plot("ClinVar_966299", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_430715, "mean_ClinVar_966299.png")
-make_world_plot("ClinVar_971850", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_449657, "mean_ClinVar_971850.png")
-make_world_plot("ClinVar_1179060", "todo", "Folding energy ΔΔG (kJ/mol)", mean_ClinVar_449657, "mean_ClinVar_1179060.png")
-
 
 
 # ======= SUPERPOPULATION MAPPING ======= #
@@ -287,13 +288,7 @@ heatmap_data <- pop_quant %>%
   select(
     population_code,
     mean_WT_Energy,
-    mean_ClinVar_917511, 
-    mean_ClinVar_430715, 
-    mean_ClinVar_449657, 
-    mean_ClinVar_2550, 
-    mean_ClinVar_966299, 
-    mean_ClinVar_971850, 
-    mean_ClinVar_1179060
+    all_of(variant_columns)
   )
 
 # Clean up column names for the plot display (e.g., "mean_ClinVar_917511" -> "ClinVar 917511")
@@ -303,6 +298,41 @@ colnames(heatmap_data) <- gsub("mean_ClinVar_", "ClinVar ", colnames(heatmap_dat
 heatmap_matrix <- heatmap_data %>%
   tibble::column_to_rownames("population_code") %>%
   as.matrix()
+
+# Match matrix columns to variant metadata
+column_metadata <- tibble(
+  matrix_column = colnames(heatmap_matrix)
+) %>%
+  mutate(
+    VariantID = str_remove(matrix_column, "^mean_Variant_")
+  ) %>%
+  left_join(
+    variant_info %>%
+      select(id, label, classification),
+    by = c("VariantID" = "id")
+  ) %>%
+  mutate(
+    # Special handling for the WT column
+    label = if_else(
+      matrix_column == "mean_WT_Energy",
+      "WT",
+      coalesce(label, VariantID)
+    ),
+    classification = if_else(
+      matrix_column == "mean_WT_Energy",
+      "WT",
+      classification
+    )
+  )
+
+# Labels shown along the x-axis
+variant_labels <- column_metadata$label
+
+# Column annotation must have matrix column names as row names
+annotation_col <- column_metadata %>%
+  select(matrix_column, Classification = classification) %>%
+  tibble::column_to_rownames("matrix_column") %>%
+  as.data.frame()
 
 
 # PREPARE THE METADATA ANNOTATION DATA FRAME
@@ -314,14 +344,20 @@ annotation_df <- pop_lookup %>%
   tibble::column_to_rownames("population_code") %>%
   as.data.frame()
 
-# DEFINE EXPLICIT COLORS FOR THE SUPERPOPULATIONS (Optional but recommended)
+# DEFINE EXPLICIT COLORS FOR THE SUPERPOPULATIONS and Pathogenic/Benign
 annotation_colors <- list(
   Superpopulation = c(
-    EAS = "#7FC97F", # Soft Green
-    EUR = "#BEAED4", # Soft Purple
-    AFR = "#FDC086", # Soft Orange
-    AMR = "#FFFF99", # Soft Yellow
-    SAS = "#386CB0"  # Soft Blue
+    EAS = "#7FC97F",
+    EUR = "#BEAED4",
+    AFR = "#FDC086",
+    AMR = "#FFFF99",
+    SAS = "#386CB0"
+  ),
+  
+  Classification = c(
+    WT = "grey60",
+    Benign = "#2CA25F",
+    Pathogenic = "#DE2D26"
   )
 )
 
@@ -335,14 +371,16 @@ pheatmap(
   clustering_distance_cols = "euclidean",
   clustering_method = "complete",
   
-  # Row Annotations & Colors
+  # Row/column Annotations, colors, labels
   annotation_row = annotation_df,
+  annotation_col = annotation_col,
   annotation_colors = annotation_colors,
+  labels_col = variant_labels,
   
   # Cell numbers display logic (Original raw values)
   display_numbers = round(heatmap_matrix, 2),
   number_color = "black",
-  fontsize_number = 9,
+  fontsize_number = 8,
   
   # Aesthetics & Background configuration
   color = colorRampPalette(c("#313695", "#f7f7f7", "#a50026"))(50), 
@@ -350,7 +388,7 @@ pheatmap(
   background_color = "white",   
   
   # Labels and titles
-  main = "Population vs Mutation Effects\n(Color Gradient: Column Z-Score | Text: Raw DDG)",
+  main = "Population vs Mutation Effects\n(Heatmap: column-wise Z-score | Text: Raw DDG)",
   angle_col = 45,
   
   # filename and dimensions here
