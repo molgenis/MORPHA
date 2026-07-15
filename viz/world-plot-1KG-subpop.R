@@ -409,8 +409,7 @@ pheatmap(
   background_color = "white",   
   
   # Labels and titles
-  main = "Population vs Mutation Effects\n(Heatmap: column-wise Z-score | Text: Raw DDG)",
-  # "3201 individuals aggregated at haplotype level 6402 per sub-population"
+  main = "Population vs Mutation Effects\nΔΔG aggregated per sub-population over 6402 haplotypes from 3201 individuals\nΔhg38 represents haplotype ΔG difference to GRCh38",
   angle_col = 45,
   
   # filename and dimensions here
