@@ -117,7 +117,7 @@ tree$edge.length[tree$edge.length < 0] <- 0 # set neg to 0
 #aa <- phyDat(aa_matrix, type = "AA")
 #d <- dist.ml(aa, model = "JTT", exclude = "pairwise")
 #tree <- upgma(d) %>% ladderize()
-write.tree(tree, "MEFV_protein_tree.nwk")
+#write.tree(tree, "MEFV_protein_tree.nwk")
 
 superpop_cols <- c(AFR = "#E41A1C", AMR = "#377EB8", EAS = "#4DAF4A",
                    EUR = "#984EA3", SAS = "#FF7F00", unknown = "grey50")
@@ -132,10 +132,21 @@ p <- ggtree(tree) %<+% ann +
   scale_color_manual(values = superpop_cols, na.value = "grey50") +
   xlim(0,0.007)+
   theme_tree2() +
-  labs(title = "MEFV protein haplotype tree",
-       subtitle = "Based on high-coverage WGS Illumina data from 3,202 samples from the 1000 Genomes Project (1kGP), described in Byrska-Bishop et al., 2022. HG01783 excluded due to mixed ancestry.",
+  theme(
+    plot.title = element_text(size = 24, color = "black"),
+    legend.title = element_text(size = 14),
+    legend.text  = element_text(size = 12),
+    legend.key.size = unit(1.2, "cm")
+    ) +
+  guides(
+    colour = guide_legend(override.aes = list(size = 5)),
+    fill   = guide_legend(override.aes = list(size = 5))
+  ) +
+  labs(title = "MEFV protein haplotype tree across global ancestries",
+       subtitle = "Based on maximum-likelihood amino-acid evolutionary distance under the JTT substitution model on all 57 unique MEFV protein haplotypes present in 6,402 haplotypes from 3,201 individuals in the 1000 Genomes Project",
        x = "Branch length (JTT amino-acid substitutions per site)",
        color = "Dominant\nsuperpopulation")
 p
-ggsave("MEFV_protein_tree_dendrogram.pdf", p, width = 16, height = 12, limitsize = FALSE)
+#ggsave("MEFV_protein_tree_dendrogram.pdf", p, width = 16, height = 12, limitsize = FALSE)
 ggsave("MEFV_protein_tree_dendrogram.png", p, width = 16, height = 12, dpi = 300, limitsize = FALSE)
+

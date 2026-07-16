@@ -63,7 +63,7 @@ wt_baselines <- samples_quant_long %>%
   select(Haplotype, WT_Energy = Total_Energy)
 
 # Count occurence of energy levels and get top one as reference value (assuming this is the WT/reference genome)
-wt_energy_counts <- wt_baselines %>% count(WT_Energy, name = "Count", sort = TRUE)
+wt_energy_counts <- wt_baselines %>% dplyr::count(WT_Energy, name = "Count", sort = TRUE)
 head(wt_energy_counts)
 top_ref_energy <- wt_energy_counts[[1]][1]
 # ALTERNTIVE: Overall mean WT delta G energy across all haplotypes
@@ -225,7 +225,7 @@ make_world_plot <- function(main_title, sub_title, legend_title, variable_name, 
       title = main_title,
       subtitle = sub_title,
       x = "Longitude", y = "Latitude",
-      color = "Specific Population / Ethnicity"
+      color = "Ancestry"
     ) +
     
     # Set explicit layout order for the legends ---
@@ -238,6 +238,8 @@ make_world_plot <- function(main_title, sub_title, legend_title, variable_name, 
     theme_minimal() +
     theme(
       panel.background = element_rect(fill = col_oceans, color = "black"),
+      plot.subtitle = element_text(size = 8.5, color = "black"),
+      
       legend.title = element_text(size = 9, face = "bold"),
       legend.text = element_text(size = 7),
       legend.key.height = unit(0.25, "cm"),
@@ -262,8 +264,7 @@ make_world_plot <- function(main_title, sub_title, legend_title, variable_name, 
 }
 
 # plot on world map!
-#make_world_plot("1000 Genomes Project Sample Populations", "Visualizing sub-national regional and ethnic distribution", "Folding energy ΔG (kJ/mol)", mean_WT_Energy, "plot_mean_WT_Energy.png")
-
+make_world_plot("MEFV protein stability across diverse global ancestries", "Mean difference in Gibbs free energy change relative to hg38 for 6,402 MEFV haplotypes, stratified by ancestry, from 3,201 individuals in the 1000 Genomes Project", "ΔΔG (kJ/mol)\ndifference\nto GRCh38", mean_WT_diff, "plot_mean_WT_Energy.png")
 
 # ======= SUPERPOPULATION MAPPING ======= #
 
@@ -409,7 +410,7 @@ pheatmap(
   background_color = "white",   
   
   # Labels and titles
-  main = "Population vs Mutation Effects\nΔΔG aggregated per sub-population over 6402 haplotypes from 3201 individuals\nΔhg38 represents haplotype ΔG difference to GRCh38",
+  main = "Population vs Mutation Effects\nΔΔG aggregated per ancestry over 6402 haplotypes from 3201 individuals\nΔhg38 represents haplotype ΔG difference to GRCh38",
   angle_col = 45,
   
   # filename and dimensions here
