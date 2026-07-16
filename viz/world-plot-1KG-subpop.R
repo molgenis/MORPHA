@@ -410,7 +410,7 @@ pheatmap(
   background_color = "white",   
   
   # Labels and titles
-  main = "Population vs Mutation Effects\nΔΔG aggregated per ancestry over 6402 haplotypes from 3201 individuals\nΔhg38 represents haplotype ΔG difference to GRCh38",
+  main = "Impact of 'Benign' and 'Pathogenic' MEFV variants from Infevers across global ancestries\n on protein stability (mean ΔΔG per ancestry over 6,402 haplotypes from 3,201 individuals in\n1000 Genomes Project, where Δhg38 is haplotype ΔG difference to GRCh38)",
   angle_col = 45,
   
   # filename and dimensions here
