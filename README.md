@@ -107,7 +107,7 @@ sed -i 's/\r//' genename2foldedhaplo.sh
 - Run haplotype builder with these variants:  `./genename2pathohaplo.sh MEFV /path/to/MEFV-infevers-pathogenic-local.vcf.gz`
 
 # Trio of genes
-Analysis of 3 hallmark pathogenic mutations in known disease genes TTR, GBA1 and MLH1. Criteria: Ppathogenic missense mutation in relatively small protein, variable/reduced penetrance, ancestral/founder haplotypes, haplotypes proposed to explain phenotypic/penetrance differences, protein-stability/folding mechanism.
+Analysis of 3 hallmark pathogenic mutations in known disease genes TTR, GBA1 and MLH1. Criteria: pathogenic missense mutation in relatively small protein, variable/reduced penetrance, ancestral/founder haplotypes, haplotypes proposed to explain phenotypic/penetrance differences, protein-stability/folding mechanism.
 Notes:
 - TTR has a 20-residue signal peptide to be removed (https://www.uniprot.org/uniprotkb/P02766/entry)
 - GBA1 has a 39-residue signal peptide to be removed (https://www.uniprot.org/uniprotkb/P04062/entry)
