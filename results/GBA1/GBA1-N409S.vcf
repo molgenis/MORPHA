@@ -1,0 +1,3 @@
+##fileformat=VCFv4.1
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+1	1392	c.1226A>G	T	C	.	.	.
