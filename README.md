@@ -5,9 +5,13 @@ Example run (in this order):
 1. `./genename2uniqproteinhaplo.sh <gene>`
    - Using GRCh38 and 1000G data, reconstruct and group all 1KG haplotypes.
 2. `./genename2pathogenicvariants.sh <gene>`
-   - Obtain all known pathogenic variants
+   - Obtain pathogenic variants from ClinVar and prepare for merging with 1000G haplotypes.
 3. `./genename2pathohaplo.sh <gene> <localized vcf.gz>`
    - Spike pathogenic variants into 1KG haplotypes and group them.
+   - A custom variant vcf.gz can be supplied here, skipping step 2.
+     - Made with `bgzip -c abc.vcf > abc.vcf.gz` followed by `tabix -p vcf abc.vcf.gz`.
+     - BEWARE: the VCF `POS` field must be calculated as: `(hg38 location) - (GFF transcript start location) + 1`.
+     - Also, `ID` field may NOT include `:`.
 4. `./genename2foldedhaplo.sh <gene>`
    - Fold all unique haplotype proteins, 1KG and spiked.
    - Expects [esmfold-server](https://github.com/joerivandervelde/esmfold-server) to run on your network, default address http://192.168.2.9:8000, adjust accordingly.
