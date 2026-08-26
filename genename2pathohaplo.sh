@@ -9,6 +9,10 @@ fi
 GENE=$1 #e.g. "MEFV"
 PATHOVARIANTSLOCAL=$2 #e.g. "results/MEFV/infevers/MEFV-infevers-one-inframedel.vcf.gz"
 
+# Parse optional third argument for removing signal peptides from the front of
+# reconstructed amino acid sequences before aggregation (SIGNAL_CUTOFF, default to 0)
+SIGNAL_CUTOFF="${3:-0}"
+
 echo "Starting script with gene name = ${GENE}"
 echo "Using pathovariants local file = ${PATHOVARIANTSLOCAL}"
 
@@ -341,8 +345,8 @@ else
   for f in "${GENESAMPLESPATHODIR}/"*.protein.fa; do
       id=$(basename "$f" .protein.fa)
 
-      # Use awk to build the full sequence, then truncate at the first asterisk
-      seq=$(awk '
+      # Use awk to build the full sequence, truncate at stop, and cut signal peptide
+      seq=$(awk -v cutoff="$SIGNAL_CUTOFF" '
           /^>/ {next}
           {
               gsub(/[[:space:]]/, "", $0)
@@ -352,17 +356,24 @@ else
               stop_pos = index(full_seq, "*")
               if (stop_pos > 0) {
                   # Cut off everything from the * onwards
-                  print substr(full_seq, 1, stop_pos - 1)
-              } else {
-                  print full_seq
+                  full_seq = substr(full_seq, 1, stop_pos - 1)
               }
+
+              # Trim signal peptide from the front (start at position cutoff + 1)
+              if (cutoff > 0 && length(full_seq) > cutoff) {
+                  full_seq = substr(full_seq, cutoff + 1)
+              } else if (cutoff > 0 && length(full_seq) <= cutoff) {
+                  full_seq = ""
+              }
+
+              print full_seq
           }
       ' "$f")
 
       if [ -z "$seq" ]; then
-          # Note: If a stop codon is at the very first position, the sequence becomes empty
-          echo "Warning: Protein sequence for $id is empty (possible immediate stop codon)" >&2
-          continue
+          # If stop codon or signal cutoff renders sequence empty
+          echo "ERROR: Protein sequence for $id is empty (possible immediate stop codon or cutoff exceeds length)" >&2
+          exit 1
       fi
 
       printf "%s\t%s\n" "$id" "$seq" >> "${PROTPERSAMPLEANDPATHO}"

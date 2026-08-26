@@ -2,8 +2,9 @@
 MOlecular effect Range of germline Pathogenic variation in global protein HAplotypes
 
 Example run (in this order):
-1. `./genename2uniqproteinhaplo.sh <gene>`
+1. `./genename2uniqproteinhaplo.sh <gene> <front signal peptide cutoff, optional, default = 0>`
    - Using GRCh38 and 1000G data, reconstruct and group all 1KG haplotypes.
+   - If front signal peptide cutoff is provided, the first N residues will be removed from each output protein sequence.
 2. `./genename2pathogenicvariants.sh <gene>`
    - Obtain pathogenic variants from ClinVar and prepare for merging with 1000G haplotypes.
 3. `./genename2pathohaplo.sh <gene> <localized vcf.gz>`
@@ -104,3 +105,18 @@ sed -i 's/\r//' genename2foldedhaplo.sh
 - Compress: `bgzip -c MEFV-infevers-pathogenic-local.vcf > MEFV-infevers-pathogenic-local.vcf.gz`
 - Index: `tabix -p vcf MEFV-infevers-pathogenic-local.vcf.gz`
 - Run haplotype builder with these variants:  `./genename2pathohaplo.sh MEFV /path/to/MEFV-infevers-pathogenic-local.vcf.gz`
+
+# Trio of genes
+Analysis of 3 hallmark pathogenic mutations in known disease genes TTR, GBA1 and MLH1. Criteria: Ppathogenic missense mutation in relatively small protein, variable/reduced penetrance, ancestral/founder haplotypes, haplotypes proposed to explain phenotypic/penetrance differences, protein-stability/folding mechanism.
+Notes:
+- TTR has a 20-residue signal peptide to be removed (https://www.uniprot.org/uniprotkb/P02766/entry)
+- GBA1 has a 39-residue signal peptide to be removed (https://www.uniprot.org/uniprotkb/P04062/entry)
+- MLH1 does not have a signal peptide
+```
+./genename2uniqproteinhaplo.sh TTR 20
+./genename2pathohaplo.sh TTR results/TTR/TTR-V50M.vcf.gz 20
+./genename2uniqproteinhaplo.sh GBA1 39
+./genename2pathohaplo.sh GBA1 results/GBA1/GBA1-N409S.vcf.gz 39
+./genename2uniqproteinhaplo.sh MLH1
+./genename2pathohaplo.sh MLH1 results/MLH1/MLH1-L622H.vcf.gz
+```
