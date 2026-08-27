@@ -107,16 +107,30 @@ sed -i 's/\r//' genename2foldedhaplo.sh
 - Run haplotype builder with these variants:  `./genename2pathohaplo.sh MEFV /path/to/MEFV-infevers-pathogenic-local.vcf.gz`
 
 # Trio of genes
-Analysis of 3 hallmark pathogenic mutations in known disease genes TTR, GBA1 and MLH1. Criteria: pathogenic missense mutation in relatively small protein, variable/reduced penetrance, ancestral/founder haplotypes, haplotypes proposed to explain phenotypic/penetrance differences, protein-stability/folding mechanism.
+Analysis of 3 hallmark pathogenic mutations in known disease genes TTR-V50M, GBA1-N409S and MLH1-L622H.
+- Research question: When does genetic background modulate pathogenicity?
+- Criteria: pathogenic missense mutation in relatively small protein, variable/reduced penetrance, ancestral/founder haplotypes, haplotypes proposed to explain phenotypic/penetrance differences, protein-stability/folding mechanism.
 Notes:
 - TTR has a 20-residue signal peptide to be removed (https://www.uniprot.org/uniprotkb/P02766/entry)
 - GBA1 has a 39-residue signal peptide to be removed (https://www.uniprot.org/uniprotkb/P04062/entry)
 - MLH1 does not have a signal peptide
 ```
 ./genename2uniqproteinhaplo.sh TTR 20
-./genename2pathohaplo.sh TTR results/TTR/TTR-V50M.vcf.gz 20
 ./genename2uniqproteinhaplo.sh GBA1 39
-./genename2pathohaplo.sh GBA1 results/GBA1/GBA1-N409S.vcf.gz 39
 ./genename2uniqproteinhaplo.sh MLH1
+
+./genename2pathohaplo.sh TTR results/TTR/TTR-V50M.vcf.gz 20
+./genename2pathohaplo.sh GBA1 results/GBA1/GBA1-N409S.vcf.gz 39
 ./genename2pathohaplo.sh MLH1 results/MLH1/MLH1-L622H.vcf.gz
+
+./genename2foldedhaplo.sh TTR
+./genename2foldedhaplo.sh GBA1
+./genename2foldedhaplo.sh MLH1
+```
+Control sample: TP53-R175H
+- Pathogenic missense mutation in small protein but no established R175H-specific ancestral-haplotype mechanism explaining variation in penetrance.
+```
+./genename2uniqproteinhaplo.sh TP53
+./genename2pathohaplo.sh TP53 results/TP53/TP53-R175H.vcf.gz
+./genename2foldedhaplo.sh TP53
 ```
