@@ -3,6 +3,7 @@
 # results/<gene>/<gene>_protein_path_haplotypes.fa -> produced by genename2pathohaplo.sh
 # viz/igsr_samples.tsv -> static resource
 library(purrr)
+library(stringr)
 
 gene <- "MEFV"
 
