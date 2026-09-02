@@ -49,6 +49,7 @@ ClinVar VCF: 1-based
 POS 3243405 -> CAT
 
 ## Quantify protein stability example
+### FoldX
 ```
 for i in {9..57}; do
    /Applications/FoldX/foldx5_Mac_0/foldx_20261231 --command=RepairPDB --pdb=MEFV_protein_variant_${i}.pdb
@@ -57,6 +58,23 @@ done
 for i in {1..275}; do
    /Applications/FoldX/foldx5_Mac_0/foldx_20261231 --command=RepairPDB --pdb=MEFV_protein_path_variant_${i}.pdb
    /Applications/FoldX/foldx5_Mac_0/foldx_20261231 --command=Stability --pdb=MEFV_protein_path_variant_${i}_Repair.pdb
+done
+```
+### Rosetta
+```
+for i in {1..7}; do
+   /Applications/rosetta.binary.m1.release-408/main/source/bin/relax.static.macosclangrelease \
+      -in:file:s TTR_protein_path_variant_${i}_Repair.pdb \
+      -relax:fast \
+      -nstruct 10 \
+      -out:file:scorefile TTR_protein_path_variant_${i}_Repair.sc \
+      -out:path:pdb /tmp/
+   /Applications/rosetta.binary.m1.release-408/main/source/bin/relax.static.macosclangrelease \
+      -in:file:s TTR_protein_variant_${i}_Repair.pdb \
+      -relax:fast \
+      -nstruct 10 \
+      -out:file:scorefile TTR_protein_variant_${i}_Repair.sc \
+      -out:path:pdb /tmp/
 done
 ```
 
@@ -134,3 +152,6 @@ Control sample: TP53-R175H
 ./genename2pathohaplo.sh TP53 results/TP53/TP53-R175H.vcf.gz
 ./genename2foldedhaplo.sh TP53
 ```
+Check file names after folding, those numbered 1 may be prefixed with ">". Also, move 'folded' output dir to results/<gene>.
+Then run R scripts merge_haplo_with_igsrmd.R, getQuant-FoldX.R, etc.
+
