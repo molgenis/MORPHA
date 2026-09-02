@@ -7,7 +7,7 @@ library(readr)
 library(stringr)
 library(purrr)
 
-gene <- "MEFV"
+gene <- "TTR"
 
 # load the sample data
 setwd("~/git/MORPHA/")
@@ -38,7 +38,7 @@ foldx_data <- fxout_files %>%
     # Extract just the variant identifier from the path/filename string
     # e.g., extracts "MEFV_protein_variant_1" out of "results/MEFV/folded/MEFV_protein_variant_1_Repair_0_ST.fxout"
     df <- df %>% 
-      mutate(Variant = str_extract(file_path, "MEFV_protein_(path_)?variant_\\d+"))
+      mutate(Variant = str_extract(file_path, paste0(gene, "_protein_(path_)?variant_\\d+")))
     
     return(df)
   })
@@ -55,5 +55,5 @@ updated_samples <- updated_samples %>%
 # 5. View your newly updated data frame
 head(updated_samples)
 
-write.table(updated_samples, paste0("results/", gene, "/", gene, "_protein_haplotypes_quant.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(updated_samples, paste0("results/", gene, "/", gene, "_protein_haplotypes_quant_foldx.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
 
