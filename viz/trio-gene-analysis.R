@@ -13,7 +13,7 @@ library(rstatix)
 library(tidytext)
 
 genes <- c("TTR", "GBA1", "MLH1", "TP53", "MEFV")
-genes <- c("TTR")
+genes <- c("TTR","TP53")
 
 setwd("~/git/MORPHA/")
 
@@ -21,12 +21,13 @@ setwd("~/git/MORPHA/")
 samples <- read.delim("viz/igsr_samples.tsv", sep = "\t", check.names = FALSE)
 samples$`Biosample ID` <- NULL
 samples$`Data collections` <- NULL
-samples$`Superpopulation code` <- NULL
+#samples$`Superpopulation code` <- NULL
 samples$`Superpopulation name` <- NULL
 samples$`Population elastic ID` <- NULL
 samples <- samples %>%
   rename(population_code = `Population code`) %>%
   rename(population_name = `Population name`) %>%
+  rename(superpopulation_code = `Superpopulation code`) %>%
   filter(`Sample name` != "HG01783") # drop 1 mixed ancestry individual
 
 head(samples)
@@ -43,7 +44,7 @@ for (gene in genes) {
   #gene = "TTR"
   
   # read quantifications
-  quant <- read.delim( paste0("results/", gene, "/", gene, "_protein_haplotypes_quant.tsv"),  sep = "\t", check.names = FALSE)
+  quant <- read.delim( paste0("results/", gene, "/", gene, "_protein_haplotypes_quant_rosetta.tsv"),  sep = "\t", check.names = FALSE)
   quant <- quant %>% filter(Sample_name != "HG01783")
   head(quant)
   
@@ -95,7 +96,7 @@ for (gene in genes) {
   # View the flattened haplotype-level data frame
   head(samples_quant)
   
-  samples_quant <- samples_quant %>% select(Haplotype, population_code, label, DDG) %>% mutate(gene = gene)
+  samples_quant <- samples_quant %>% select(Haplotype, population_code, superpopulation_code, label, DDG) %>% mutate(gene = gene)
   
   # combine all per-gene data frames into one master data frame
   samples_quant_all <- bind_rows(samples_quant_all, samples_quant)
@@ -116,16 +117,33 @@ df_plot <- samples_quant_all %>%
 #### PLOTTING ####
 ##################
 
-
-## WITH GLM / LM TRENDLINE THROUGH POPULATION MEANS
-
-
 # ---------------------------------------------------------
-# 1. Calculate one mean DDG per population within each gene
+# 1. Ensure superpopulation info is present
+# ---------------------------------------------------------
+
+# Define superpopulation colors
+sp_colors <- c(
+  EUR = "#648FFF",
+  AMR = "#785EF0",
+  EAS = "#DC267F",
+  SAS = "#FE6100",
+  AFR = "#FFB000"
+)
+
+sp_title_str <- paste0(
+  "Population Code (",
+  "<span style='color:#648FFF;'>EUR</span> ",
+  "<span style='color:#785EF0;'>AMR</span> ",
+  "<span style='color:#DC267F;'>EAS</span> ",
+  "<span style='color:#FE6100;'>SAS</span> ",
+  "<span style='color:#FFB000;'>AFR</span>)"
+)
+# ---------------------------------------------------------
+# 2. Calculate population means & ordering
 # ---------------------------------------------------------
 
 pop_means <- df_plot %>%
-  group_by(gene_variant, population_code) %>%
+  group_by(gene_variant, population_code, superpopulation_code) %>%
   summarise(
     pop_mean = mean(DDG, na.rm = TRUE),
     .groups = "drop"
@@ -133,25 +151,19 @@ pop_means <- df_plot %>%
   group_by(gene_variant) %>%
   arrange(pop_mean, .by_group = TRUE) %>%
   mutate(
-    pop_index = row_number()
+    pop_index = row_number(),
+    pop_ordered = reorder_within(population_code, -pop_mean, gene_variant),
+    sp_color = sp_colors[superpopulation_code]
   ) %>%
   ungroup()
 
-# ---------------------------------------------------------
-# 2. Create the ordered factor used by ggplot
-# ---------------------------------------------------------
-
-pop_means <- pop_means %>%
-  mutate(
-    pop_ordered = reorder_within(
-      population_code,
-      -pop_mean,
-      gene_variant
-    )
-  )
+# Extract exact color order matching the x-axis tick order across panels
+x_label_colors <- pop_means %>%
+  arrange(gene_variant, desc(pop_mean)) %>%
+  pull(sp_color)
 
 # ---------------------------------------------------------
-# 3. Fit a linear model to the population means
+# 3. Fit linear model to population means
 # ---------------------------------------------------------
 
 model_slopes <- pop_means %>%
@@ -170,7 +182,7 @@ model_slopes <- pop_means %>%
   )
 
 # ---------------------------------------------------------
-# 4. Generate predicted values for the trendline
+# 4. Generate predicted values for trendline
 # ---------------------------------------------------------
 
 trendline <- pop_means %>%
@@ -188,7 +200,7 @@ trendline <- pop_means %>%
   ungroup()
 
 # ---------------------------------------------------------
-# 5. Add facet labels to the raw data
+# 5. Combine metadata into faceted data frame
 # ---------------------------------------------------------
 
 df_faceted <- df_plot %>%
@@ -209,6 +221,7 @@ df_faceted <- df_plot %>%
     by = "gene_variant"
   )
 
+
 # ---------------------------------------------------------
 # 6. Plot
 # ---------------------------------------------------------
@@ -218,18 +231,18 @@ ggplot(
   aes(
     x = pop_ordered,
     y = DDG,
-    color = population_code
+    color = superpopulation_code
   )
 ) +
   
   # Raw individual haplotype points
   geom_point(
     position = position_jitter(width = 0.2),
-    alpha = 0.4,
+    alpha = 0.2,
     size = 1.1
   ) +
   
-  # Mean  SE
+  # Mean SE
   stat_summary(
     fun.data = mean_se,
     geom = "errorbar",
@@ -248,54 +261,64 @@ ggplot(
     show.legend = FALSE
   ) +
   
-  # -------------------------------------------------------
-# Linear trend fitted to the POPULATION MEANS
-# -------------------------------------------------------
-geom_line(
-  data = trendline,
-  aes(
-    x = pop_ordered,
-    y = predicted,
-    group = 1
-  ),
-  color = "blue",
-  linewidth = 1,
-  inherit.aes = FALSE
-) +
+  # Linear trend fitted to the POPULATION MEANS
+  geom_line(
+    data = trendline,
+    aes(
+      x = pop_ordered,
+      y = predicted,
+      group = 1
+    ),
+    color = "black",
+    linewidth = 0.5,
+    inherit.aes = FALSE
+  ) +
   
   # Zero reference
   geom_hline(
     yintercept = 0,
     linetype = "dashed",
     color = "red",
-    alpha = 0.5
+    #alpha = 0.5
   ) +
   
   # Facets
   facet_wrap(
     ~ facet_label,
-    scales = "free",
+    scales = "free", #free_x
     ncol = 2
   ) +
   
   scale_x_reordered() +
+  scale_color_manual(values = sp_colors) +
   
   labs(
     title = "DDG distributions with ancestry-dependent mutation energy change coefficient (AMECC)",
-    subtitle = "Populations sorted high to low by mean DDG (Blue line = linear fit)",
-    x = "Population Code",
+    subtitle = "Populations sorted high to low by mean DDG (X-axis colored by Superpopulation)",
+    x = sp_title_str, # Set HTML formatted title here
     y = expression(paste(Delta, Delta, "G (energy change in REU)")),
     color = "Population"
   ) +
   
-  theme_minimal() +
+  theme_bw() + #theme_minimal
   
   theme(
+    panel.grid = element_blank(),
+    #panel.grid.major.y = element_line(color = "grey90", linewidth = 0.5),
+    # Format x-axis title as markdown to render the inline HTML colors
+    axis.title.x = element_markdown(
+      size = 10,
+      face = "bold",
+      margin = margin(t = 8)
+    ),
+    # Colored tick labels via native vector
     axis.text.x = element_text(
       angle = 90,
       vjust = 0.5,
       hjust = 1,
-      size = 8
+      size = 8,
+      face = "bold",
+      color = x_label_colors
     ),
     legend.position = "none"
   )
