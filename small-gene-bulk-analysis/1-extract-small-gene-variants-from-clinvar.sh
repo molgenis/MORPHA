@@ -75,12 +75,26 @@ while IFS=, read -r raw_gene _ raw_tx _ || [ -n "$raw_gene" ]; do
         formatted_vars=""
         var_count=0
         
-        while IFS= read -r line; do
-            if [ -z "$line" ]; then
-                continue
+        #while IFS= read -r line; do
+        #    if [ -z "$line" ]; then
+        #        continue
+        #    fi
+        #    var_count=$((var_count + 1))
+        #    printf "%s\t.\t.\t.\n" "$line" >> "genes/$gene/variants.vcf"
+        #done <<< "$vars_output"
+
+        while IFS=$'\t' read -r chrom hg38_pos id ref alt; do
+            if [ -z "$hg38_pos" ]; then
+                echo "No hg38_pos"
+                exit 1
             fi
+            # Convert hg38 genomic position to transcript-relative position
+            tx_pos=$((hg38_pos - start + 1))
             var_count=$((var_count + 1))
-            printf "%s\t.\t.\t.\n" "$line" >> "genes/$gene/variants.vcf"
+            printf "%s\t%s\t%s\t%s\t%s\t.\t.\t.\n" \
+                "$chrom" "$tx_pos" "$id" "$ref" "$alt" \
+                >> "genes/$gene/variants.vcf"
+
         done <<< "$vars_output"
 
         echo $gene >> $OUTPUT
