@@ -43,8 +43,7 @@ while IFS=',' read -r gene np_id nm_id aa_length uniprot signal_start signal_end
 
     ./genename2uniqproteinhaplo.sh "$gene" "$cutoff"
     ./genename2pathohaplo.sh "$gene" "$CURRENT_DIR/genes/$gene/variants.vcf.gz" "$cutoff"
-    rm -rf "tmp/$gene"
-    rm -rf "tmp/$gene"
+    rm -rf "tmp/$gene" || true # don't stop when file locks have not been fully released
 
 done < "$CURRENT_DIR/$UNIPROTSIGNALOUT"
 #done <<< "APOA2,NP_001634.1,NM_001643.2,100,P02652,1,18,18,OK"
