@@ -53,7 +53,31 @@ localize_chain() {
     ' "$GLOBAL_CHAIN" > "$LOCAL_CHAIN"
 }
 
+# Validate that we have proper IDs in the VCF and they are unique
+bcftools query -f '%ID\n' "${PATHOVARIANTSLOCAL}" | awk '
+BEGIN { invalid = 0; dupes = 0 }
+{
+    # 1. Check if ID is "." or contains no alphanumeric characters ([a-zA-Z0-9])
+    if ($1 ~ /^\.$/ || $1 !~ /[a-zA-Z0-9]/) {
+        print "ERROR: Invalid or missing ID found on line " NR ": \"" $1 "\""
+        invalid++
+    }
 
+    # 2. Check for uniqueness
+    if ($1 in seen) {
+        print "ERROR: Duplicate ID found on line " NR ": \"" $1 "\""
+        dupes++
+    }
+    seen[$1]++
+}
+END {
+    if (invalid > 0 || dupes > 0) {
+        printf "\nValidation FAILED: %d invalid ID(s), %d duplicate ID(s) found out of %d variants.\n", invalid, dupes, NR
+        exit 1
+    } else {
+        printf "Validation PASSED: All %d variant IDs are valid and unique!\n", NR
+    }
+}'
 
 bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read -r variant; do
 
@@ -66,12 +90,11 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
     POS=$(echo "$variant" | cut -d':' -f2)
     ID=$(echo "$variant" | cut -d':' -f3)
     ALT=$(echo "$variant" | cut -d':' -f4)
-    CHR_POS_ALT="${CHROM}_${POS}_${ALT}"
 
     echo "Processing variant at $CHROM:$POS with ALT allele $ALT..."
 
     # Make a temporary single-variant VCF on the fly plus index
-    SINGLE_VAR_TMP_VCF="${GENEDIR}/tmp_singlevar_${CHR_POS_ALT}.vcf.gz"
+    SINGLE_VAR_TMP_VCF="${GENEDIR}/tmp_singlevar_${ID}.vcf.gz"
     if [ ! -s "${SINGLE_VAR_TMP_VCF}" ]; then
       echo "Creating ${SINGLE_VAR_TMP_VCF}..."
       bcftools view -O z -i "CHROM=='${CHROM}' && POS==${POS} && ID=='${ID}' && ALT=='${ALT}'" "${PATHOVARIANTSLOCAL}" > "${SINGLE_VAR_TMP_VCF}"
@@ -98,7 +121,7 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
             PREFIX_PTH="${GENESAMPLESPATHODIR}/${SAMPLE}.h${H}"
 
             # protein file output location, can already check and skip if present!
-            SAMPLEPATH_PROT="${PREFIX_PTH}.${CHR_POS_ALT}.${ID}.protein.fa"
+            SAMPLEPATH_PROT="${PREFIX_PTH}.${ID}.protein.fa"
             if [ -s "${SAMPLEPATH_PROT}" ]; then
               echo "File ${SAMPLEPATH_PROT} already present for ${SAMPLE} h${H}, skipping to next..."
               continue
@@ -140,7 +163,7 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
             # "${START}" "${SAMPLE_START}" "${REGION_LEN}"
 
             # liftover the tmp pathogenic variant VCF to match sample coordinates
-            LIFTOVER_SINGLE_VAR_TMP_VCF="${PREFIX_PTH}.${CHR_POS_ALT}.liftover.vcf"
+            LIFTOVER_SINGLE_VAR_TMP_VCF="${PREFIX_PTH}.${ID}.liftover.vcf"
             if [ ! -s "${LIFTOVER_SINGLE_VAR_TMP_VCF}" ]; then
               echo "Creating ${LIFTOVER_SINGLE_VAR_TMP_VCF}..."
               CrossMap vcf "${LOCAL_CHAIN}" "${SINGLE_VAR_TMP_VCF}" "${RENAMEDHEADERSAMPLEFA}" "${LIFTOVER_SINGLE_VAR_TMP_VCF}"
@@ -202,8 +225,8 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
 
 
             # run consensus to create FA file with pathogenic variant
-            SAMPLEPATHCHAIN="${PREFIX_PTH}.${CHR_POS_ALT}.chain"
-            SAMPLEPATHFA="${PREFIX_PTH}.${CHR_POS_ALT}.fa"
+            SAMPLEPATHCHAIN="${PREFIX_PTH}.${ID}.chain"
+            SAMPLEPATHFA="${PREFIX_PTH}.${ID}.fa"
 
             # if noop, allele is already present, so sequence is unchanged
             if [ "${NOOP}" -eq 1 ]; then
@@ -265,8 +288,7 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
 
             # translate to CDS and protein:
             echo "Now translating to protein"
-            SAMPLEPATH_CDS="${PREFIX_PTH}.${CHR_POS_ALT}.cds.fa"
-            #echo "gffread ${PATHOLIFTEDSAMPLEGFF} -g ${PREFIX_PTH}.${CHR_POS_ALT}.renamed.fa -x ${PREFIX_PTH}.${CHR_POS_ALT}.cds.fa -y ${PREFIX_PTH}.${CHR_POS_ALT}.protein.fa -S"
+            SAMPLEPATH_CDS="${PREFIX_PTH}.${ID}.cds.fa"
             gffread "${PATHOLIFTEDSAMPLEGFF}" -g "${SAMPLEPATHFA}" -x "${SAMPLEPATH_CDS}" -y "${SAMPLEPATH_PROT}" -S
 
 
