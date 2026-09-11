@@ -41,6 +41,9 @@ for FASTA_FILE in "${NORMALHAPLO}" "${PATHHAPLO}"; do
         full_header = substr($0, 1, nl_pos - 1)
         seq = substr($0, nl_pos + 1)
 
+        # Remove accidental leading ">" from the first header
+        sub(/^>/, "", full_header)
+
         # 2. Extract clean name (works for both normal and path headers)
         pipe_pos = index(full_header, "|")
         if (pipe_pos > 0) {
