@@ -16,9 +16,17 @@ while IFS=',' read -r gene np_id nm_id aa_length uniprot signal_start signal_end
     # Skip header
     [ "$gene" = "gene" ] && continue
 
-    # Remove possible CR from Windows-formatted CSV
-    gene=$(printf '%s' "$gene" | tr -d '\r')
-    signal_end=$(printf '%s' "$signal_end" | tr -d '\r')
+    # Paths to the two resulting FASTA files
+    NORMAL_HAPLO="results/$gene/${gene}_protein_haplotypes.fa"
+    PATH_HAPLO="results/$gene/${gene}_protein_path_haplotypes.fa"
+
+    # Skip gene if both already exist
+    if [ -s "$NORMAL_HAPLO" ] && [ -s "$PATH_HAPLO" ]; then
+        echo "=== $gene ==="
+        echo "Both haplotype FASTA files already exist."
+        echo "Skipping gene."
+        continue
+    fi
 
     # Default: no signal peptide
     cutoff=0
