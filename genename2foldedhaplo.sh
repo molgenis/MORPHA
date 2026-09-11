@@ -10,7 +10,7 @@ echo "Starting script with gene name = ${GENE}"
 RESULTDIR="results/${GENE}"
 NORMALHAPLO="${RESULTDIR}/${GENE}_protein_haplotypes.fa"
 PATHHAPLO="${RESULTDIR}/${GENE}_protein_path_haplotypes.fa"
-PDBDIR="${RESULTDIR}/${GENE}/folded"
+PDBDIR="${RESULTDIR}/folded"
 mkdir -p "${PDBDIR}"
 
 echo "Starting 10x structural ensemble generation..."
