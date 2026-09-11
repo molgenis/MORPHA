@@ -24,7 +24,8 @@ count=0
 matched_genes=0
 
 # either Pathogenic, Likely_pathogenic, Pathogenic/Likely_pathogenic in combination with 1 star or better by ignoring anything with 'no_assertion'
-FILTER_EXPR='(CLNSIG ~ "^Pathogenic$" || CLNSIG ~ "^Likely_pathogenic$" || CLNSIG ~ "^Pathogenic/Likely_pathogenic$") && (CLNREVSTAT !~ "no_assertion")'
+# also exlude SVs (ref or alt >50 BP)
+FILTER_EXPR='(CLNSIG ~ "^Pathogenic$" || CLNSIG ~ "^Likely_pathogenic$" || CLNSIG ~ "^Pathogenic/Likely_pathogenic$") && (CLNREVSTAT !~ "no_assertion") && strlen(REF) <= 50 && strlen(ALT) <= 50'
 
 while IFS=, read -r raw_gene _ raw_tx _ || [ -n "$raw_gene" ]; do
     gene=$(echo "$raw_gene" | tr -d '\r\n ')
@@ -74,14 +75,6 @@ while IFS=, read -r raw_gene _ raw_tx _ || [ -n "$raw_gene" ]; do
         # 1	1392	c.1226A>G	T	C	.	.	.
         formatted_vars=""
         var_count=0
-        
-        #while IFS= read -r line; do
-        #    if [ -z "$line" ]; then
-        #        continue
-        #    fi
-        #    var_count=$((var_count + 1))
-        #    printf "%s\t.\t.\t.\n" "$line" >> "genes/$gene/variants.vcf"
-        #done <<< "$vars_output"
 
         while IFS=$'\t' read -r chrom hg38_pos id ref alt; do
             if [ -z "$hg38_pos" ]; then
