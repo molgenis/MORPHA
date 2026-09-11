@@ -7,7 +7,7 @@ Example run (in this order):
    - If front signal peptide cutoff is provided, the first N residues will be removed from each output protein sequence.
 2. `./genename2pathogenicvariants.sh <gene>`
    - Obtain pathogenic variants from ClinVar and prepare for merging with 1000G haplotypes.
-3. `./genename2pathohaplo.sh <gene> <localized vcf.gz>`
+3. `./genename2pathohaplo.sh <gene> <localized vcf.gz> <front signal peptide cutoff, optional, default = 0>`
    - Spike pathogenic variants into 1KG haplotypes and group them.
    - A custom variant vcf.gz can be supplied here, skipping step 2.
      - Made with `bgzip -c abc.vcf > abc.vcf.gz` followed by `tabix -p vcf abc.vcf.gz`.
@@ -152,6 +152,4 @@ Control sample: TP53-R175H
 ./genename2pathohaplo.sh TP53 results/TP53/TP53-R175H.vcf.gz
 ./genename2foldedhaplo.sh TP53
 ```
-Check file names after folding, those numbered 1 may be prefixed with ">". Also, move 'folded' output dir to results/<gene>.
 Then run R scripts merge_haplo_with_igsrmd.R, getQuant-FoldX.R, etc.
-
