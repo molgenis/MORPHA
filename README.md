@@ -2,10 +2,10 @@
 MOlecular effect Range of germline Pathogenic variation in global protein HAplotypes
 
 Example run (in this order):
-1. `./genename2uniqproteinhaplo.sh <gene> <front signal peptide cutoff, optional, default = 0>`
+1. `./genename2uniqproteinhaplo.sh <gene> <RefSeq protein ID> <front signal peptide cutoff, optional, default = 0>`
    - Using GRCh38 and 1000G data, reconstruct and group all 1KG haplotypes.
    - If front signal peptide cutoff is provided, the first N residues will be removed from each output protein sequence.
-2. `./genename2pathogenicvariants.sh <gene>`
+2. `./genename2pathogenicvariants.sh <gene> <RefSeq protein ID> `
    - Obtain pathogenic variants from ClinVar and prepare for merging with 1000G haplotypes.
 3. `./genename2pathohaplo.sh <gene> <localized vcf.gz> <front signal peptide cutoff, optional, default = 0>`
    - Spike pathogenic variants into 1KG haplotypes and group them.
