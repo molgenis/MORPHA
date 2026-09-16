@@ -345,51 +345,18 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
             fi
 
             # need to clean up since we process so many samples x haplotypes x mutations, only keep protein file
-            if [ -n "${SAMPLEPATH_CDS}" ] && [ -f "${SAMPLEPATH_CDS}" ]; then
-                rm "${SAMPLEPATH_CDS}"
-            fi
-            if [ -n "${SAMPLEPATHCHAIN}" ] && [ -f "${SAMPLEPATHCHAIN}" ]; then
-                rm "${SAMPLEPATHCHAIN}"
-            fi
-            if [ -n "${SAMPLEPATHFA}" ] && [ -f "${SAMPLEPATHFA}" ]; then
-                rm "${SAMPLEPATHFA}"
-                rm "${SAMPLEPATHFA}.fai"
-            fi
-            if [ -n "${RENAMEDHEADERSAMPLEFA}" ] && [ -f "${RENAMEDHEADERSAMPLEFA}" ]; then
-                rm "${RENAMEDHEADERSAMPLEFA}"
-                rm "${RENAMEDHEADERSAMPLEFA}.fai"
-            fi
-            if [ -n "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}" ] && [ -f "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}" ]; then
-                rm "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}"
-            fi
-            if [ -n "${PATHOLIFTEDSAMPLEGFF}" ] && [ -f "${PATHOLIFTEDSAMPLEGFF}" ]; then
-                rm "${PATHOLIFTEDSAMPLEGFF}"
-                rm "${PATHOLIFTEDSAMPLEGFF}".*.unmap
-            fi
-            if [ -n "${LIFTOVER_SINGLE_VAR_TMP_VCF}" ] && [ -f "${LIFTOVER_SINGLE_VAR_TMP_VCF}" ]; then
-                rm "${LIFTOVER_SINGLE_VAR_TMP_VCF}"
-            fi
-            if [ -n "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz" ] && [ -f "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz" ]; then
-                rm "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz"
-            fi
-            if [ -n "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz.csi" ] && [ -f "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz.csi" ]; then
-                rm "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz.csi"
-            fi
-            if [ -n "${LIFTOVER_SINGLE_VAR_TMP_VCF}.unmap" ] && [ -f "${LIFTOVER_SINGLE_VAR_TMP_VCF}.unmap" ]; then
-                rm "${LIFTOVER_SINGLE_VAR_TMP_VCF}.unmap"
-            fi
-            if [ -n "${LOCAL_CHAIN}" ] && [ -f "${LOCAL_CHAIN}" ]; then
-                rm "${LOCAL_CHAIN}"
-            fi
-
-
+            # cleanup per sample/haplotype using -f to ignore missing optional files
+            rm -f "${SAMPLEPATH_CDS}" "${SAMPLEPATHCHAIN}" "${SAMPLEPATHFA}" "${SAMPLEPATHFA}.fai" \
+                  "${RENAMEDHEADERSAMPLEFA}" "${RENAMEDHEADERSAMPLEFA}.fai" \
+                  "${CHROMRENAME_HAPLIFTEDSAMPLEGFF}" "${PATHOLIFTEDSAMPLEGFF}" \
+                  "${PATHOLIFTEDSAMPLEGFF}".*.unmap "${LIFTOVER_SINGLE_VAR_TMP_VCF}" \
+                  "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz" "${LIFTOVER_SINGLE_VAR_TMP_VCF}.gz.csi" \
+                  "${LIFTOVER_SINGLE_VAR_TMP_VCF}.unmap" "${LOCAL_CHAIN}"
         done
     done < "${DATADIR}/${SAMPLENAMES}"
 
-    if [ -n "${SINGLE_VAR_TMP_VCF}" ] && [ -f "${SINGLE_VAR_TMP_VCF}" ]; then
-        rm "${SINGLE_VAR_TMP_VCF}"
-        rm "${SINGLE_VAR_TMP_VCF}.csi"
-    fi
+    rm -f "${SINGLE_VAR_TMP_VCF}"
+    rm -f "${SINGLE_VAR_TMP_VCF}.csi"
 
 done
 
