@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # tools required:
 #% samtools --version
@@ -137,10 +138,10 @@ END {
 }' "${GENEDIR}/${GRCh38MANEGFF}")
 
 if [ -n "${MISSING_TYPES}" ]; then
-    echo "Error: Validation failed for '${GFF_FILE}'." >&2
+    echo "Error: Validation failed for '${GENEDIR}/${GRCh38MANEGFF}'." >&2
     echo "Missing required feature type(s): $(echo ${MISSING_TYPES} | tr '\n' ' ')" >&2
     # Optional: remove invalid file so it gets retried next time
-    rm -f "${GFF_FILE}"
+    rm -f "${GENEDIR}/${GRCh38MANEGFF}"
     exit 1
 fi
 echo "Validation successful for ${GENE} (${PROTEIN_ID})."
