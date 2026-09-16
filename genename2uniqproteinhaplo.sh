@@ -14,22 +14,27 @@
 #% zgrep --version
 #zgrep (BSD grep, GNU compatible) 2.6.0-FreeBSD
 
-[ -z "$1" ] && { echo "Missing argument: gene name"; exit 1; }
+if [ -z "$1" ] || [ -z "$2" ]; then
+    echo "Error: Missing required arguments."
+    echo "Usage: $0 <GENE_NAME> <REFSEQ_PROTEIN_ID> [SIGNAL_CUTOFF]"
+    exit 1
+fi
 
 GENE=$1
+PROTEIN_ID=$2
 
 # Parse optional second argument for removing signal peptides from the front of
 # reconstructed amino acid sequences before aggregation (SIGNAL_CUTOFF, default to 0)
-SIGNAL_CUTOFF="${2:-0}"
+SIGNAL_CUTOFF="${3:-0}"
 
 DATADIR=data
 TMPDIR=tmp
 mkdir -p "${DATADIR}"
 mkdir -p "${TMPDIR}"
 
-GRCh38REFFA=GRCh38_full_analysis_set_plus_decoy_hla.fa
-GRCh38REFFAINDEX=GRCh38_full_analysis_set_plus_decoy_hla.fa.fai
-GRCh38MANEGFF=MANE.GRCh38.v1.3.ensembl_genomic.gff
+GRCh38REFFA="GRCh38_full_analysis_set_plus_decoy_hla.fa"
+GRCh38REFFAINDEX="GRCh38_full_analysis_set_plus_decoy_hla.fa.fai"
+GRCh38MANEGFF="MANE.GRCh38.v1.5.refseq_genomic.gff"
 GRCh38MANEGFFGZ="${GRCh38MANEGFF}.gz"
 
 echo "Starting script with gene name = ${GENE}"
@@ -58,7 +63,7 @@ fi
 
 if [ ! -s "${DATADIR}/${GRCh38MANEGFFGZ}" ]; then
     echo "File ${DATADIR}/${GRCh38MANEGFFGZ} not found, downloading..."
-    wget -P "${DATADIR}" "https://ftp.ncbi.nlm.nih.gov/refseq/MANE/MANE_human/release_1.3/${GRCh38MANEGFFGZ}"
+    wget -P "${DATADIR}" "https://ftp.ncbi.nlm.nih.gov/refseq/MANE/MANE_human/release_1.5/${GRCh38MANEGFFGZ}"
 else
     echo "File ${DATADIR}/${GRCh38MANEGFFGZ} exists, skipping download..."
 fi
@@ -71,8 +76,41 @@ fi
 GENEDIR="${TMPDIR}/${GENE}"
 mkdir -p "${GENEDIR}"
 if [ ! -s "${GENEDIR}/${GRCh38MANEGFF}" ]; then
-    echo "File ${GENEDIR}/${GRCh38MANEGFF} not found, extracting from full GFF..."
-    zgrep "gene_name=${GENE};" "${DATADIR}/${GRCh38MANEGFFGZ}" > "${GENEDIR}/${GRCh38MANEGFF}"
+    echo "File ${GENEDIR}/${GRCh38MANEGFF} not found, extracting for Gene: ${GENE}, Protein ID: ${PROTEIN_ID}..."
+    # Pass 1: find the parent ID
+    # Pass 2: filter & print
+    # 'exon' technically not needed but good to keep compliance
+    zgrep -E "gene=${GENE}(;|$)" "${DATADIR}/${GRCh38MANEGFFGZ}" | awk -v prot="${PROTEIN_ID}" '
+    BEGIN { FS = OFS = "\t" }
+    {
+        lines[NR] = $0
+        if ($9 ~ ("protein_id=" prot "(;|$)")) {
+            split($9, attrs, ";")
+            for (i in attrs) {
+                if (attrs[i] ~ /^Parent=/) {
+                    target_tx[substr(attrs[i], 8)] = 1
+                }
+            }
+        }
+    }
+    END {
+        for (i = 1; i <= NR; i++) {
+            $0 = lines[i]
+            if ($3 == "gene") {
+                print $0
+                continue
+            }
+            split($9, attrs, ";")
+            id = ""; parent = ""
+            for (j in attrs) {
+                if (attrs[j] ~ /^ID=/) id = substr(attrs[j], 4)
+                if (attrs[j] ~ /^Parent=/) parent = substr(attrs[j], 8)
+            }
+            if ((id in target_tx) || (parent in target_tx)) {
+                print $0
+            }
+        }
+    }' > "${GENEDIR}/${GRCh38MANEGFF}"
 else
     echo "File ${GENEDIR}/${GRCh38MANEGFF} exists, skipping extraction..."
 fi
@@ -82,7 +120,7 @@ if [ ! -s "${GENEDIR}/${GRCh38MANEGFF}" ]; then
 fi
 
 # get region
-DATA=$(awk -F'\t' '$3=="transcript" {print $1, $4, $5; exit}' "${GENEDIR}/${GRCh38MANEGFF}")
+DATA=$(awk -F'\t' '$3=="mRNA" {print $1, $4, $5; exit}' "${GENEDIR}/${GRCh38MANEGFF}")
 if [ -z "$DATA" ]; then
     echo "Error: Could not find a 'transcript' feature in ${GENEDIR}/${GRCh38MANEGFF}."
     exit 1
