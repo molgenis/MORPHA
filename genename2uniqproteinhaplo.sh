@@ -121,10 +121,34 @@ if [ ! -s "${GENEDIR}/${GRCh38MANEGFF}" ]; then
     exit 1
 fi
 
+
+# validate it: check for required GFF feature types in column 3
+MISSING_TYPES=$(awk -F'\t' '
+BEGIN { gene=mRNA=CDS=exon=1 }
+$3 == "gene" { gene=0 }
+$3 == "mRNA" { mRNA=0 }
+$3 == "CDS"  { CDS=0 }
+$3 == "exon" { exon=0 }
+END {
+    if (gene) print "gene"
+    if (mRNA) print "mRNA"
+    if (CDS)  print "CDS"
+    if (exon) print "exon"
+}' "${GENEDIR}/${GRCh38MANEGFF}")
+
+if [ -n "${MISSING_TYPES}" ]; then
+    echo "Error: Validation failed for '${GFF_FILE}'." >&2
+    echo "Missing required feature type(s): $(echo ${MISSING_TYPES} | tr '\n' ' ')" >&2
+    # Optional: remove invalid file so it gets retried next time
+    rm -f "${GFF_FILE}"
+    exit 1
+fi
+echo "Validation successful for ${GENE} (${PROTEIN_ID})."
+
 # get region
 DATA=$(awk -F'\t' '$3=="mRNA" {print $1, $4, $5; exit}' "${GENEDIR}/${GRCh38MANEGFF}")
 if [ -z "$DATA" ]; then
-    echo "Error: Could not find a 'transcript' feature in ${GENEDIR}/${GRCh38MANEGFF}."
+    echo "Error: Could not find a 'mRNA' feature in ${GENEDIR}/${GRCh38MANEGFF}."
     exit 1
 fi
 read CHR START END <<< "$DATA"
