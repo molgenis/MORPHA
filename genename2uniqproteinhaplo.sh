@@ -38,6 +38,8 @@ GRCh38MANEGFF="MANE.GRCh38.v1.5.refseq_genomic.gff"
 GRCh38MANEGFFGZ="${GRCh38MANEGFF}.gz"
 
 echo "Starting script with gene name = ${GENE}"
+echo "RefSeq protein ID = ${PROTEIN_ID}"
+echo "Signal peptide cutoff = ${SIGNAL_CUTOFF}"
 
 if [ ! -s "${DATADIR}/${GRCh38REFFA}" ]; then
     echo "File ${DATADIR}/${GRCh38REFFA} not found, downloading..."

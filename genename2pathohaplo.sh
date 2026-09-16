@@ -1,20 +1,24 @@
 #!/bin/bash
 
 # Check for required arguments
-if [ -z "$1" ] || [ -z "$2" ]; then
-    echo "Usage: $0 <gene name> <pathovariants local vcf.gz>"
+if [ -z "$1" ] || [ -z "$2" ] || [ -z "$3" ]; then
+    echo "Error: Missing required arguments."
+    echo "Usage: $0 <GENE_NAME> <REFSEQ_PROTEIN_ID> <pathovariants local vcf.gz> [SIGNAL_CUTOFF]"
     exit 1
 fi
 
 GENE=$1 #e.g. "MEFV"
-PATHOVARIANTSLOCAL=$2 #e.g. "results/MEFV/infevers/MEFV-infevers-one-inframedel.vcf.gz"
+PROTEIN_ID=$2 #e.g."NP_000234.1"
+PATHOVARIANTSLOCAL=$3 #e.g. "results/MEFV/infevers/MEFV-infevers-one-inframedel.vcf.gz"
 
-# Parse optional third argument for removing signal peptides from the front of
+# Parse optional argument for removing signal peptides from the front of
 # reconstructed amino acid sequences before aggregation (SIGNAL_CUTOFF, default to 0)
-SIGNAL_CUTOFF="${3:-0}"
+SIGNAL_CUTOFF="${4:-0}"
 
 echo "Starting script with gene name = ${GENE}"
-echo "Using pathovariants local file = ${PATHOVARIANTSLOCAL}"
+echo "RefSeq protein ID = ${PROTEIN_ID}"
+echo "Pathogenic variants local file = ${PATHOVARIANTSLOCAL}"
+echo "Signal peptide cutoff = ${SIGNAL_CUTOFF}"
 
 DATADIR=data
 TMPDIR=tmp
@@ -22,6 +26,7 @@ GENEDIR="${TMPDIR}/${GENE}"
 SAMPLENAMES="1kGP_sample_names.txt"
 GENESAMPLESHAPLODIR="${GENEDIR}/samples"
 GENESAMPLESPATHODIR="${GENEDIR}/samples_patho"
+GRCh38MANEGFF="MANE.GRCh38.v1.5.refseq_genomic.gff"
 mkdir -p "${GENESAMPLESPATHODIR}"
 
 localize_chain() {
@@ -78,6 +83,37 @@ END {
         printf "Validation PASSED: All %d variant IDs are valid and unique!\n", NR
     }
 }'
+
+
+
+# validate that CDS records in the gene-specific MANE GFF contain ONLY the supplied protein ID and no other
+if [ ! -s "${GENEDIR}/${GRCh38MANEGFF}" ]; then
+    echo "File ${GENEDIR}/${GRCh38MANEGFF} is empty or does not exist."
+    exit 1
+else
+    echo "File ${GENEDIR}/${GRCh38MANEGFF} exists, validating CDS records for protein ID..."
+    if ! awk -v prot="${PROTEIN_ID}" -F'\t' '
+    $3 == "CDS" {
+        split($9, attrs, ";")
+        for (i in attrs) {
+            if (attrs[i] ~ /^protein_id=/) {
+                pid = substr(attrs[i], 12)
+                if (pid == prot) {
+                    found = 1
+                } else {
+                    other_found = 1
+                }
+            }
+        }
+    }
+    END {
+        # Exit with failure (1) if no matching CDS was found OR if an unexpected protein_id was present
+        if (!found || other_found) exit 1
+    }' "${GENEDIR}/${GRCh38MANEGFF}"; then
+        echo "Error: GFF file '${GENEDIR}/${GRCh38MANEGFF}' does not strictly contain ONLY CDS records for PROTEIN_ID '${PROTEIN_ID}'." >&2
+        exit 1
+    fi
+fi
 
 bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read -r variant; do
 
@@ -250,8 +286,9 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
             fi
 
             # now also need to lift GFF files, first create tmp GFF and then do liftover
-            HAPLIFTEDSAMPLEGFF="${PREFIX_HAP}.lifted.local.MANE.GRCh38.v1.3.ensembl_genomic.gff"
-            CHROMRENAME_HAPLIFTEDSAMPLEGFF="${PREFIX_PTH}.lifted.local.chromrename.MANE.GRCh38.v1.3.ensembl_genomic.gff"
+            HAPLIFTEDSAMPLEGFF="${PREFIX_HAP}.lifted.local.${GRCh38MANEGFF}"
+            CHROMRENAME_HAPLIFTEDSAMPLEGFF="${PREFIX_PTH}.lifted.local.chromrename.${GRCh38MANEGFF}"
+            PATHOLIFTEDSAMPLEGFF="${PREFIX_PTH}.patholifted.local.${GRCh38MANEGFF}"
 
             if [ ! -s "${HAPLIFTEDSAMPLEGFF}" ]; then
               echo "File ${HAPLIFTEDSAMPLEGFF} missing or empty for ${SAMPLE} h${H}."
@@ -272,8 +309,6 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
             fi
 
             # now perform liftover to pathogenic variant coordinates - cannot use CrossMap here, it does not handle indels correctly!
-            PATHOLIFTEDSAMPLEGFF="${PREFIX_PTH}.patholifted.local.MANE.GRCh38.v1.3.ensembl_genomic.gff"
-
             # if noop, no liftover magic is needed, just reuse existing one
             if [ "${NOOP}" -eq 1 ]; then
                 echo "No allele change - copying existing GFF"
