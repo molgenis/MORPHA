@@ -282,6 +282,16 @@ if [[ ! -s "${GENEREFFA}" ]]; then
     exit 1
 fi
 
+# filter 1000G for SVs we can leave out or else throw error
+echo "Filtering 1000G VCF for non-relevant SVs in region $CHR:$START-$END"
+FILTERED_VCF="${GENEDIR}/1kGP.SV-filtered.vcf.gz"
+filter_sv_for_gene "$CHR" "$START" "$END" | bgzip -c > "${FILTERED_VCF}"
+if [[ ! -s "${FILTERED_VCF}" ]]; then
+    echo "Error: File ${FILTERED_VCF} not found or empty."
+    exit 1
+fi
+bcftools index -f "${FILTERED_VCF}"
+
 GENESAMPLESDIR="${GENEDIR}/samples"
 mkdir -p "$GENESAMPLESDIR"
 
@@ -297,18 +307,6 @@ while read -r SAMPLE; do
             echo "File ${PREFIX}.fa and ${PREFIX}.chain exists and not empty, skipping ${SAMPLE} h${H}..."
             continue
         fi
-
-        echo "Filtering VCF for sample=${SAMPLE} haplotype=${H} in region $CHR:$START-$END"
-
-        FILTERED_VCF="${GENESAMPLESDIR}/${SAMPLE}.h${H}.filtered.vcf.gz"
-
-        filter_sv_for_gene \
-            "$CHR" \
-            "$START" \
-            "$END" |
-            bgzip -c > "${FILTERED_VCF}"
-
-        bcftools index -f "${FILTERED_VCF}"
 
         echo "Creating consensus and chain file for sample=${SAMPLE}, haplotype=${H}..."
 
