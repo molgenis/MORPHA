@@ -113,6 +113,9 @@ filter_sv_for_gene() {
 
             if (info[i] ~ /^END=/)
                 svend = substr(info[i], 5) + 0
+
+            if (info[i] ~ /^SVLEN=/)
+                svlen = substr(info[i], 7)
         }
 
         # a DEL, supported by bcftools consensus
@@ -123,45 +126,74 @@ filter_sv_for_gene() {
 
         # Handle DUP variants
         if (svtype == "DUP") {
+            if ($5 == "<DUP>") {
+                # a DUP completely outside region
+                if (svend < start || $2 > end) {
+                    next
+                }
 
-            # a DUP completely outside region
-            if (svend < start || $2 > end) {
-                next
-            }
+                # a DUP encompassing the entire gene - ignore because the localized FASTA is not intended to represent the extra copy
+                if ($2 <= start && svend >= end) {
+                    next
+                }
 
-            # a DUP encompassing the entire gene - ignore because the localized FASTA is not intended to represent the extra copy
-            if ($2 <= start && svend >= end) {
-                next
-            }
-
-            # otherwise, add DUP sequence to the VCF by grabbing the full sequence spanning POS to END
-            cmd = "samtools faidx \"" ref "\" " $1 ":" $2 "-" svend " | grep -v \">\" | tr -d \"\n\""
-            dup_seq = ""
-            if ((cmd | getline dup_seq) > 0) {
-                # REF is the original sequence spanning POS to END
-                $4 = dup_seq
-                # ALT is two identical copies of that sequence (tandem duplication)
-                $5 = dup_seq dup_seq
-            } else {
-                print "ERROR: Failed to fetch sequence for " $1 ":" $2 "-" svend > "/dev/stderr"
+                # otherwise, add DUP sequence to the VCF by grabbing the full sequence spanning POS to END
+                cmd = "samtools faidx \"" ref "\" " $1 ":" $2 "-" svend " | grep -v \">\" | tr -d \"\n\""
+                dup_seq = ""
+                if ((cmd | getline dup_seq) > 0) {
+                    # REF is the original sequence spanning POS to END
+                    $4 = dup_seq
+                    # ALT is two identical copies of that sequence (tandem duplication)
+                    $5 = dup_seq dup_seq
+                } else {
+                    print "ERROR: Failed to fetch sequence for " $1 ":" $2 "-" svend > "/dev/stderr"
+                    close(cmd)
+                    exit 1
+                }
                 close(cmd)
-                exit 1
+
+                print
+                next
+            } else {
+                print "ERROR: unsupported DUP type: " $5 " " $3 " " $1 ":" $2 "-" svend > "/dev/stderr"
+                print "OFFENDING VCF RECORD:\n" $0 > "/dev/stderr"
+                exit 2
             }
-            close(cmd)
-
-            print
-            next
         }
 
-        # insertions, throw error
-        if (svtype == "INS" || svtype ~ /^INS:/) {
-            print "ERROR: unsupported SV: " svtype " " $3 " " $1 ":" $2 "-" svend > "/dev/stderr"
-            print "OFFENDING VCF RECORD:\n" $0 > "/dev/stderr"
-            exit 2
+        if (svtype == "INS") {
+            if ($5 == "<INS:ME:ALU>") {
+                # Standard Alu consensus sequence (~282 bp)
+                # https://www.dfam.org/family/DF000000002
+                alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTCAGGAGATCGAGACCATCCTGGCTAACACGGTGAAACCCCGTCTCTACTAAAAATACAAAAAATTAGCCGGGCGTGGTGGCGGGCGCCTGTAGTCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATGGCGTGAACCCGGGAGGCGGAGCTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                alu_len = length(alu)
+                if (svlen <= 0){
+                  print "INS:ME:ALU svlen <= 0 for\n" $0 > "/dev/stderr"
+                  exit 2
+                }
+                if (svlen <= alu_len) {
+                    # Trim consensus to match SVLEN
+                    ins_seq = substr(alu, 1, svlen)
+                } else {
+                    # Pad with Poly-A tail to match SVLEN
+                    ins_seq = alu
+                    extra = svlen - alu_len
+                    for (k = 1; k <= extra; k++) {
+                        ins_seq = ins_seq "A"
+                    }
+                }
+                $5 = $4 ins_seq
+                print
+                next
+            } else {
+                print "ERROR: unsupported INS type: " $5 " " $3 " " $1 ":" $2 "-" svend > "/dev/stderr"
+                print "OFFENDING VCF RECORD:\n" $0 > "/dev/stderr"
+                exit 2
+            }
         }
 
-        # Everything else: also fail
-        print "ERROR: unsupported SV: " svtype " " $3 " " $1 ":" $2 "-" svend > "/dev/stderr"
+        # unsupported other, throw error
+        print "ERROR: unsupported other SV: " svtype " " $3 " " $1 ":" $2 "-" svend > "/dev/stderr"
         print "OFFENDING VCF RECORD:\n" $0 > "/dev/stderr"
         exit 2
     }'
