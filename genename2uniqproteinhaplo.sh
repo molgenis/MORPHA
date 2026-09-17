@@ -83,7 +83,8 @@ filter_sv_for_gene() {
         -r "${chrom}:${start}-${end}" \
         "${DATADIR}/${THGENSAMPLES}" |
     awk -v start="$start" \
-        -v end="$end" '
+        -v end="$end" \
+        -v ref="${DATADIR}/${GRCh38REFFA}" '
     BEGIN { FS=OFS="\t" }
 
     /^#/ {
@@ -120,14 +121,35 @@ filter_sv_for_gene() {
             next
         }
 
-        # a DUP encompassing the entire gene
-        # ignore because the localized FASTA is not intended to represent the extra copy
-        if (svtype == "DUP" &&  $2 <= start && svend >= end) {
-            next
-        }
+        # Handle DUP variants
+        if (svtype == "DUP") {
 
-        # a DUP completely outside region
-        if (svtype == "DUP" && (svend < start || $2 > end)) {
+            # a DUP completely outside region
+            if (svend < start || $2 > end) {
+                next
+            }
+
+            # a DUP encompassing the entire gene - ignore because the localized FASTA is not intended to represent the extra copy
+            if ($2 <= start && svend >= end) {
+                next
+            }
+
+            # otherwise, add DUP sequence to the VCF by grabbing the full sequence spanning POS to END
+            cmd = "samtools faidx \"" ref "\" " $1 ":" $2 "-" svend " | grep -v \">\" | tr -d \"\n\""
+            dup_seq = ""
+            if ((cmd | getline dup_seq) > 0) {
+                # REF is the original sequence spanning POS to END
+                $4 = dup_seq
+                # ALT is two identical copies of that sequence (tandem duplication)
+                $5 = dup_seq dup_seq
+            } else {
+                print "ERROR: Failed to fetch sequence for " $1 ":" $2 "-" svend > "/dev/stderr"
+                close(cmd)
+                exit 1
+            }
+            close(cmd)
+
+            print
             next
         }
 
