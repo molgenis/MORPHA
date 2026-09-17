@@ -6,8 +6,6 @@ set -euo pipefail
 #samtools 1.23.1
 #% bcftools --version
 #bcftools 1.23.1
-#% CrossMap --version
-#CrossMap 0.7.0
 #% gffread --version
 #0.12.9
 #% wget --version
@@ -74,6 +72,78 @@ if [[ ! -s "${DATADIR}/${GRCh38MANEGFFGZ}" ]]; then
     echo "Error: File ${DATADIR}/${GRCh38MANEGFFGZ} not found or empty."
     exit 1
 fi
+
+filter_sv_for_gene() {
+    set -o pipefail
+    local chrom="$1"
+    local start="$2"
+    local end="$3"
+
+    bcftools view \
+        -r "${chrom}:${start}-${end}" \
+        "${DATADIR}/${THGENSAMPLES}" |
+    awk -v start="$start" \
+        -v end="$end" '
+    BEGIN { FS=OFS="\t" }
+
+    /^#/ {
+        print
+        next
+    }
+
+    {
+        alt = $5
+
+        # Ordinary variants
+        if (alt !~ /^</) {
+            print
+            next
+        }
+
+        # Symbolic alleles
+        svtype = ""
+        svend = ""
+
+        n = split($8, info, ";")
+
+        for (i = 1; i <= n; i++) {
+            if (info[i] ~ /^SVTYPE=/)
+                svtype = substr(info[i], 8)
+
+            if (info[i] ~ /^END=/)
+                svend = substr(info[i], 5) + 0
+        }
+
+        # a DEL, supported by bcftools consensus
+        if (svtype == "DEL") {
+            print
+            next
+        }
+
+        # a DUP encompassing the entire gene
+        # ignore because the localized FASTA is not intended to represent the extra copy
+        if (svtype == "DUP" &&  $2 <= start && svend >= end) {
+            next
+        }
+
+        # a DUP completely outside region
+        if (svtype == "DUP" && (svend < start || $2 > end)) {
+            next
+        }
+
+        # insertions, throw error
+        if (svtype == "INS" || svtype ~ /^INS:/) {
+            print "ERROR: unsupported SV: " svtype " " $3 " " $1 ":" $2 "-" svend > "/dev/stderr"
+            print "OFFENDING VCF RECORD:\n" $0 > "/dev/stderr"
+            exit 2
+        }
+
+        # Everything else: also fail
+        print "ERROR: unsupported SV: " svtype " " $3 " " $1 ":" $2 "-" svend > "/dev/stderr"
+        print "OFFENDING VCF RECORD:\n" $0 > "/dev/stderr"
+        exit 2
+    }'
+}
 
 # create gene-specific MANE GFF
 GENEDIR="${TMPDIR}/${GENE}"
@@ -220,31 +290,45 @@ mkdir -p "$GENESAMPLESDIR"
 while read -r SAMPLE; do
     [ -z "$SAMPLE" ] && continue # skip empty lines
     for H in 1 2; do
+
         PREFIX="${GENESAMPLESDIR}/${SAMPLE}.h${H}"
+
         if [[ -s "${PREFIX}.fa" && -s "${PREFIX}.chain" ]]; then
             echo "File ${PREFIX}.fa and ${PREFIX}.chain exists and not empty, skipping ${SAMPLE} h${H}..."
             continue
         fi
+
+        echo "Filtering VCF for sample=${SAMPLE} haplotype=${H} in region $CHR:$START-$END"
+
+        FILTERED_VCF="${GENESAMPLESDIR}/${SAMPLE}.h${H}.filtered.vcf.gz"
+
+        filter_sv_for_gene \
+            "$CHR" \
+            "$START" \
+            "$END" |
+            bgzip -c > "${FILTERED_VCF}"
+
+        bcftools index -f "${FILTERED_VCF}"
+
         echo "Creating consensus and chain file for sample=${SAMPLE}, haplotype=${H}..."
-        # create consensus for this sample/haplotype for region, with filter in place
-        # remove <INS>, <INS:ME:LINE1>, <INS:SVA>, <INS:ME:ALU>, etc because they cannot be processed
-		bcftools consensus \
-			-f "${GENEREFFA}" \
-			-s "$SAMPLE" \
-			-H "$H" \
-      -e 'ALT~"^<INS" || ALT=="<DUP>"' \
-			--regions-overlap 1 \
-			--chain "${PREFIX}.chain" \
-			"${DATADIR}/${THGENSAMPLES}" \
-		> "${PREFIX}.fa"
-		if [ ! -s "${PREFIX}.fa" ]; then
-        echo "File ${PREFIX}.fa empty for ${SAMPLE} h${H}."
-        exit 1
-    fi
-    if [ ! -s "${PREFIX}.chain" ]; then
-        echo "File ${PREFIX}.chain empty for ${SAMPLE} h${H}."
-        exit 1
-    fi
+
+        bcftools consensus \
+            -f "${GENEREFFA}" \
+            -s "$SAMPLE" \
+            -H "$H" \
+            --regions-overlap 1 \
+            --chain "${PREFIX}.chain" \
+            "${FILTERED_VCF}" \
+            > "${PREFIX}.fa"
+
+      if [ ! -s "${PREFIX}.fa" ]; then
+          echo "File ${PREFIX}.fa empty for ${SAMPLE} h${H}."
+          exit 1
+      fi
+      if [ ! -s "${PREFIX}.chain" ]; then
+          echo "File ${PREFIX}.chain empty for ${SAMPLE} h${H}."
+          exit 1
+      fi
     done
 done < "${DATADIR}/${SAMPLENAMES}"
 
@@ -273,8 +357,6 @@ while read -r SAMPLE; do
             continue
         fi
         echo "Creating lifted GFF for sample=${SAMPLE}, haplotype=${H}..."
-        echo "cmd used: CrossMap gff ${PREFIX}.chain ${GENEDIR}/${GRCh38MANEGFF} ${LIFTEDMANE}"
-        #CrossMap gff "${PREFIX}.chain" "${GENEDIR}/${GRCh38MANEGFF}" "${LIFTEDMANE}" --> may fail on indels, replaced with below!!
         ./project_gff_by_chain_preserve_features.py \
             "${PREFIX}.chain" \
             "${GENEDIR}/${GRCh38MANEGFF}" \
@@ -446,10 +528,3 @@ else
 fi
 
 echo "...all done"
-
-# --> inspect file and number of haplotypes:
-# tail -50 MEFV_protein_haplotypes.fa
-# --> check based on sequences:
-# awk '/^>/ {printf("\n%s\n",$0);next} {printf("%s",$0)} END {printf("\n")}' MEFV_protein_haplotypes.fa | grep -v "^>" | grep -v "^$" | sort | uniq | wc -l
-# --> check based on headers:
-# grep -c "^>" MEFV_protein_haplotypes.fa
