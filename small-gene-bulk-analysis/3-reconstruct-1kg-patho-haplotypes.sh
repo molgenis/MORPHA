@@ -41,8 +41,8 @@ while IFS=',' read -r gene np_id nm_id aa_length uniprot signal_start signal_end
     echo "Signal peptide end: ${signal_end:-none}"
     echo "Calling: ../genename2uniqproteinhaplo.sh $gene $cutoff"
 
-    ./genename2uniqproteinhaplo.sh "$gene" "$cutoff"
-    ./genename2pathohaplo.sh "$gene" "$CURRENT_DIR/genes/$gene/variants.vcf.gz" "$cutoff"
+    ./genename2uniqproteinhaplo.sh "$gene" "$np_id" "$cutoff"
+    ./genename2pathohaplo.sh "$gene" "$np_id" "$CURRENT_DIR/genes/$gene/variants.vcf.gz" "$cutoff"
     rm -rf "tmp/$gene" || true # don't stop when file locks have not been fully released
 
 done < "$CURRENT_DIR/$UNIPROTSIGNALOUT"
