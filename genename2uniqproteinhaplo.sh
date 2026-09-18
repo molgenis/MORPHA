@@ -196,6 +196,13 @@ expand_sv_for_gene() {
                 print "ERROR: <INS> svlen <= 0 for record:\n" $0 > "/dev/stderr"
                 exit 2
             }
+
+            # --- DROP END TAG FROM INS RECORDS ---
+            # For SV insertion calls, some callers output END as the target site duplication (TSD) or assembly break end range
+            # this confuses bcftools consensus, breaking its logic and failing
+            gsub(/END=[0-9]+;?/, "", $8)
+            gsub(/;$/, "", $8)  # Clean up trailing semicolon if END was at the end
+
             if ($5 == "<INS:ME:ALU>") {
                 # Standard Alu consensus sequence (~282 bp)
                 # https://www.dfam.org/family/DF000000002
@@ -216,8 +223,6 @@ expand_sv_for_gene() {
                 print
                 next
             } else if ($5 == "<INS>") {
-                print "[DEBUG BEFORE INS] POS=" $2 " REF=" $4 " ALT=" $5 " SVLEN_RAW=" svlen > "/dev/stderr"
-
                 # Generate a synthetic, stop-codon-free Poly-Gly-Ala insertion
                 # Pattern "GGCGCC" translates to Glycine/Alanine without stop codons in any frame
                 # Glycine is the smallest amino acid (H side chain) and provides maximum backbone flexibility without steric hindrance.
@@ -233,9 +238,6 @@ expand_sv_for_gene() {
                 ins_seq = substr(ins_seq, 1, svlen)
                 # Replace symbolic <INS> with reference base + synthetic sequence
                 $5 = $4 ins_seq
-
-                print "[DEBUG AFTER INS] POS=" $2 " REF=" $4 " NEW_ALT_LEN=" length($5) " NEW_ALT_START=" substr($5, 1, 15) > "/dev/stderr"
-
                 print
                 next
             } else {
