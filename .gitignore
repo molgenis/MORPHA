@@ -16,3 +16,7 @@ tmp
 
 # plots
 *.png
+
+# special
+small-gene-bulk-analysis/MANE.GRCh38.v1.5.refseq_protein.faa.gz
+small-gene-bulk-analysis/MANE.GRCh38.v1.5.summary.txt.gz
