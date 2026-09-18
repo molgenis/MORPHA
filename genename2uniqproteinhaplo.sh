@@ -82,7 +82,8 @@ filter_sv_for_gene() {
     bcftools view \
         -r "${chrom}:${start}-${end}" \
         "${DATADIR}/${THGENSAMPLES}" |
-    awk -v start="$start" \
+    awk -v chrom="$chrom" \
+        -v start="$start" \
         -v end="$end" \
         -v ref="${DATADIR}/${GRCh38REFFA}" '
     BEGIN { FS=OFS="\t" }
@@ -118,8 +119,37 @@ filter_sv_for_gene() {
                 svlen = substr(info[i], 7)
         }
 
-        # a DEL, supported by bcftools consensus
+        # Handle DEL variants
         if (svtype == "DEL") {
+            # --> SPECIAL CASE: a deletion encompasses the entire gene specifically on chr X
+            # for diploid (female) genotype, we overwrite het alt (not hom alt!) with hom ref
+            # essentially making it the same as hemizygous (male) genotype
+            if ((chrom == "chrX") && $2 <= start && svend >= end) {
+                # Split FORMAT column ($9) to locate GT index
+                n_fmt = split($9, fmt_cols, ":")
+                # find genotype index and replace genotypes
+                gt_idx = 0
+                for (f = 1; f <= n_fmt; f++) {
+                    if (fmt_cols[f] == "GT") {
+                        gt_idx = f
+                        break
+                    }
+                }
+                if (gt_idx > 0) {
+                    for (col = 10; col <= NF; col++) {
+                        n_gt = split($col, gt_vals, ":")
+                        gt = gt_vals[gt_idx]
+                        if (gt == "0|1" || gt == "1|0") {
+                            gt_vals[gt_idx] = "0|0"
+                            new_sample = gt_vals[1]
+                            for (v = 2; v <= n_gt; v++) {
+                                new_sample = new_sample ":" gt_vals[v]
+                            }
+                            $col = new_sample
+                        }
+                    }
+                }
+            }
             print
             next
         }
