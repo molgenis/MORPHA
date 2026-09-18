@@ -73,7 +73,7 @@ if [[ ! -s "${DATADIR}/${GRCh38MANEGFFGZ}" ]]; then
     exit 1
 fi
 
-filter_sv_for_gene() {
+expand_sv_for_gene() {
     set -o pipefail
     local chrom="$1"
     local start="$2"
@@ -116,7 +116,7 @@ filter_sv_for_gene() {
                 svend = substr(info[i], 5) + 0
 
             if (info[i] ~ /^SVLEN=/)
-                svlen = substr(info[i], 7)
+                svlen = substr(info[i], 7) + 0
         }
 
         # Handle DEL variants
@@ -192,15 +192,15 @@ filter_sv_for_gene() {
         }
 
         if (svtype == "INS") {
+            if (svlen <= 0) {
+                print "ERROR: <INS> svlen <= 0 for record:\n" $0 > "/dev/stderr"
+                exit 2
+            }
             if ($5 == "<INS:ME:ALU>") {
                 # Standard Alu consensus sequence (~282 bp)
                 # https://www.dfam.org/family/DF000000002
                 alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACGAGGTCAGGAGATCGAGACCATCCTGGCTAACACGGTGAAACCCCGTCTCTACTAAAAATACAAAAAATTAGCCGGGCGTGGTGGCGGGCGCCTGTAGTCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATGGCGTGAACCCGGGAGGCGGAGCTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
                 alu_len = length(alu)
-                if (svlen <= 0){
-                  print "INS:ME:ALU svlen <= 0 for\n" $0 > "/dev/stderr"
-                  exit 2
-                }
                 if (svlen <= alu_len) {
                     # Trim consensus to match SVLEN
                     ins_seq = substr(alu, 1, svlen)
@@ -213,6 +213,29 @@ filter_sv_for_gene() {
                     }
                 }
                 $5 = $4 ins_seq
+                print
+                next
+            } else if ($5 == "<INS>") {
+                print "[DEBUG BEFORE INS] POS=" $2 " REF=" $4 " ALT=" $5 " SVLEN_RAW=" svlen > "/dev/stderr"
+
+                # Generate a synthetic, stop-codon-free Poly-Gly-Ala insertion
+                # Pattern "GGCGCC" translates to Glycine/Alanine without stop codons in any frame
+                # Glycine is the smallest amino acid (H side chain) and provides maximum backbone flexibility without steric hindrance.
+                # Alanine (CH3 side chain) is small, uncharged, non-polar, and chemically inert.
+                # see Chen et al. doi:10.1016/j.addr.2012.09.039
+                unit = "GGCGCC"
+                unit_len = length(unit)
+                ins_seq = ""
+                while (length(ins_seq) < svlen) {
+                    ins_seq = ins_seq unit
+                }
+                # Trim to exact SVLEN
+                ins_seq = substr(ins_seq, 1, svlen)
+                # Replace symbolic <INS> with reference base + synthetic sequence
+                $5 = $4 ins_seq
+
+                print "[DEBUG AFTER INS] POS=" $2 " REF=" $4 " NEW_ALT_LEN=" length($5) " NEW_ALT_START=" substr($5, 1, 15) > "/dev/stderr"
+
                 print
                 next
             } else {
@@ -366,15 +389,31 @@ if [[ ! -s "${GENEREFFA}" ]]; then
     exit 1
 fi
 
-# filter 1000G for SVs we can leave out or else throw error
+# expand SVs in the data to enable downstream handling
 echo "Filtering 1000G VCF for non-relevant SVs in region $CHR:$START-$END"
-FILTERED_VCF="${GENEDIR}/1kGP.SV-filtered.vcf.gz"
-filter_sv_for_gene "$CHR" "$START" "$END" | bgzip -c > "${FILTERED_VCF}"
-if [[ ! -s "${FILTERED_VCF}" ]]; then
-    echo "Error: File ${FILTERED_VCF} not found or empty."
+EXPANDED_VCF="${GENEDIR}/1kGP.SV-expanded.vcf"
+expand_sv_for_gene "$CHR" "$START" "$END" > "${EXPANDED_VCF}"
+if [[ ! -s "${EXPANDED_VCF}" ]]; then
+    echo "Error: File ${EXPANDED_VCF} not found or empty."
     exit 1
 fi
-bcftools index -f "${FILTERED_VCF}"
+
+# break down multiallelic records, left-align indels, set correct REF bases for shifted coordinates, and recombine back
+NORMALIZED_VCF="${GENEDIR}/1kGP.SV-expanded-normalized.vcf.gz"
+bcftools norm \
+    -f "${DATADIR}/${GRCh38REFFA}" \
+    -m -any \
+    "${EXPANDED_VCF}" | \
+bcftools norm \
+    -f "${DATADIR}/${GRCh38REFFA}" \
+    -m +any -Oz \
+    -o "${NORMALIZED_VCF}" -
+# check if created and index
+if [[ ! -s "${NORMALIZED_VCF}" ]]; then
+    echo "Error: File ${NORMALIZED_VCF} not found or empty."
+    exit 1
+fi
+bcftools index -f "${NORMALIZED_VCF}"
 
 GENESAMPLESDIR="${GENEDIR}/samples"
 mkdir -p "$GENESAMPLESDIR"
@@ -398,9 +437,9 @@ while read -r SAMPLE; do
             -f "${GENEREFFA}" \
             -s "$SAMPLE" \
             -H "$H" \
-            --regions-overlap 1 \
+            --regions-overlap 2 \
             --chain "${PREFIX}.chain" \
-            "${FILTERED_VCF}" \
+            "${NORMALIZED_VCF}" \
             > "${PREFIX}.fa"
 
       if [ ! -s "${PREFIX}.fa" ]; then
