@@ -128,6 +128,10 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
     ID=$(echo "$variant" | cut -d':' -f3)
     ALT=$(echo "$variant" | cut -d':' -f4)
 
+    # Prepare subfolder for the specific variant ID
+    VAR_DIR="${GENESAMPLESPATHODIR}/${ID}"
+    mkdir -p "${VAR_DIR}"
+
     echo "Processing variant at $CHROM:$POS with ALT allele $ALT..."
 
     # Make a temporary single-variant VCF on the fly plus index
@@ -155,7 +159,7 @@ bcftools query -f '%CHROM:%POS:%ID:%ALT\n' "${PATHOVARIANTSLOCAL}" | while read 
 
             echo "Going to work on sample: ${SAMPLE}.h${H}"
             PREFIX_HAP="${GENESAMPLESHAPLODIR}/${SAMPLE}.h${H}"
-            PREFIX_PTH="${GENESAMPLESPATHODIR}/${SAMPLE}.h${H}"
+            PREFIX_PTH="${VAR_DIR}/${SAMPLE}.h${H}"
 
             # protein file output location, can already check and skip if present!
             SAMPLEPATH_PROT="${PREFIX_PTH}.${ID}.protein.fa"
@@ -367,7 +371,8 @@ if [ -s "${PROTPERSAMPLEANDPATHO}" ]; then
     echo "File ${PROTPERSAMPLEANDPATHO} exists and not empty, skipping collection..."
 else
   : > "${PROTPERSAMPLEANDPATHO}"
-  for f in "${GENESAMPLESPATHODIR}/"*.protein.fa; do
+
+  while read -r f; do
       id=$(basename "$f" .protein.fa)
 
       # Use awk to build the full sequence, truncate at stop, and cut signal peptide
@@ -402,7 +407,7 @@ else
       fi
 
       printf "%s\t%s\n" "$id" "$seq" >> "${PROTPERSAMPLEANDPATHO}"
-  done
+  done < <(find "${GENESAMPLESPATHODIR}" -type f -name "*.protein.fa" -printf '%f\t%p\n' | sort -k1,1 | cut -f2-)
   echo "Collection and truncation complete."
 fi
 
