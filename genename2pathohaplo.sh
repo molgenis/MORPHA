@@ -412,7 +412,7 @@ else
           while IFS= read -r path; do
               printf '%s\t%s\n' "${path##*/}" "$path"
           done |
-          sort -k1,1 |
+          LC_ALL=C sort -k1,1 |
           cut -f2-
   )
   echo "Collection and truncation complete."
