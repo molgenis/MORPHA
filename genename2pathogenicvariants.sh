@@ -8,7 +8,8 @@ DATADIR=data
 TMPDIR=tmp
 GENEDIR="${TMPDIR}/${GENE}"
 
-CLINVARVCFGZ=clinvar_20260503.vcf.gz
+CLINVARVCFGZ="clinvar_20260503.vcf.gz"
+GENEMANEGFF="MANE.GRCh38.v1.5.refseq_genomic.gff"
 
 if [ ! -s "${DATADIR}/${CLINVARVCFGZ}" ]; then
     echo "File ${DATADIR}/${CLINVARVCFGZ} not found, downloading..."
@@ -22,10 +23,9 @@ if [[ ! -s "${DATADIR}/${CLINVARVCFGZ}" ]]; then
 fi
 
 # get region
-GRCh38MANEGFF=MANE.GRCh38.v1.3.ensembl_genomic.gff
-DATA=$(awk -F'\t' '$3=="transcript" {print $1, $4, $5; exit}' "${GENEDIR}/${GRCh38MANEGFF}")
+DATA=$(awk -F'\t' '$3=="mRNA" {print $1, $4, $5; exit}' "${GENEDIR}/${GENEMANEGFF}")
 if [ -z "$DATA" ]; then
-    echo "Error: Could not find a 'transcript' feature in ${GENEDIR}/${GRCh38MANEGFF}."
+    echo "Error: Could not find a 'mRNA' feature in ${GENEDIR}/${GENEMANEGFF}."
     exit 1
 fi
 read CHR START END <<< "$DATA"
