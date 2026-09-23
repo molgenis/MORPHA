@@ -5,7 +5,7 @@ set -euo pipefail
 # File definitions
 CLINVAR="../data/clinvar_20260503.vcf.gz"
 SMALLGENES="short_MANE_proteins.csv"
-MANEGFF="../data/MANE.GRCh38.v1.3.ensembl_genomic.gff.gz"
+MANEGFF="../data/MANE.GRCh38.v1.5.refseq_genomic.gff"
 OUTPUT="genes_with_path_var.txt"
 
 echo "=== Starting Variant Extraction Pipeline ==="
@@ -36,7 +36,7 @@ while IFS=, read -r raw_gene _ raw_tx _ || [ -n "$raw_gene" ]; do
 
     # Find matching transcript coordinates safely ignoring SIGPIPE from gzip/awk exit
     region_info=$( (gzip -dc "$MANEGFF" 2>/dev/null || true) | awk -v tx="$tx_id" '
-    $3 == "transcript" && $0 ~ tx {
+    $3 == "mRNA" && $0 ~ tx {
         print $1, $4, $5;
         exit
     }')
