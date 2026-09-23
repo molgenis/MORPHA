@@ -5,9 +5,9 @@ Example run (in this order):
 1. `./genename2uniqproteinhaplo.sh <gene> <RefSeq protein ID> <front signal peptide cutoff, optional, default = 0>`
    - Using GRCh38 and 1000G data, reconstruct and group all 1KG haplotypes.
    - If front signal peptide cutoff is provided, the first N residues will be removed from each output protein sequence.
-2. `./genename2pathogenicvariants.sh <gene> <RefSeq protein ID> `
+2. `./genename2pathogenicvariants.sh <gene>`
    - Obtain pathogenic variants from ClinVar and prepare for merging with 1000G haplotypes.
-3. `./genename2pathohaplo.sh <gene> <localized vcf.gz> <front signal peptide cutoff, optional, default = 0>`
+3. `./genename2pathohaplo.sh <gene> <RefSeq protein ID> <localized vcf.gz> <front signal peptide cutoff, optional, default = 0>`
    - Spike pathogenic variants into 1KG haplotypes and group them.
    - A custom variant vcf.gz can be supplied here, skipping step 2.
      - Made with `bgzip -c abc.vcf > abc.vcf.gz` followed by `tabix -p vcf abc.vcf.gz`.
