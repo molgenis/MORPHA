@@ -372,7 +372,7 @@ if [ -s "${PROTPERSAMPLEANDPATHO}" ]; then
 else
   : > "${PROTPERSAMPLEANDPATHO}"
 
-  while read -r f; do
+  while IFS= read -r f; do
       id=$(basename "$f" .protein.fa)
 
       # Use awk to build the full sequence, truncate at stop, and cut signal peptide
@@ -407,7 +407,14 @@ else
       fi
 
       printf "%s\t%s\n" "$id" "$seq" >> "${PROTPERSAMPLEANDPATHO}"
-  done < <(find "${GENESAMPLESPATHODIR}" -type f -name "*.protein.fa" -printf '%f\t%p\n' | sort -k1,1 | cut -f2-)
+  done < <(
+      find "${GENESAMPLESPATHODIR}" -type f -name "*.protein.fa" |
+          while IFS= read -r path; do
+              printf '%s\t%s\n' "${path##*/}" "$path"
+          done |
+          sort -k1,1 |
+          cut -f2-
+  )
   echo "Collection and truncation complete."
 fi
 
