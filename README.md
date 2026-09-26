@@ -164,3 +164,39 @@ wget https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000G_2504_high
 mv 1kGP_high_coverage_Illumina.chrX.filtered.SNV_INDEL_SV_phased_panel.v2.vcf.gz 1kGP_high_coverage_Illumina.chrX.filtered.SNV_INDEL_SV_phased_panel.vcf.gz
 mv 1kGP_high_coverage_Illumina.chrX.filtered.SNV_INDEL_SV_phased_panel.v2.vcf.gz.tbi 1kGP_high_coverage_Illumina.chrX.filtered.SNV_INDEL_SV_phased_panel.vcf.gz.tbi
 ```
+
+# BCFtools version must be >1.21
+1.13 and earlier: Fails with error `consensus: unrecognized option '--regions-overlap'`
+1.14 – 1.20: Ignores all alt alleles from liftover pathogenic VCF because it required exact sample matching to variant VCF to be applied 
+1.21 or later: **Needed to run succesfully**. Smart fallback was restored, defaults to applying alt alleles without exact sample match.
+
+# Typical WSL Ubuntu installation
+```
+sudo apt install samtools
+sudo apt install gffread
+sudo apt install tabix
+sudo apt install dos2unix
+pip install CrossMap
+```
+
+BCFtools: download and compile 1.23.1 (or later)
+```
+wget https://github.com/samtools/bcftools/releases/download/1.23.1/bcftools-1.23.1.tar.bz2
+tar -xjf bcftools-1.23.1.tar.bz2
+cd bcftools-1.23.1
+./configure
+make
+sudo make install
+hash -r
+bcftools --version
+```
+
+If Git checkout was under Windows, convert line endings, and run
+```
+cd MORPHA/
+dos2unix *.sh
+dos2unix project_gff_by_chain_preserve_features.py
+cd small-gene-bulk-analysis/
+dos2unix *.sh
+./3-reconstruct-1kg-patho-haplotypes.sh
+```
