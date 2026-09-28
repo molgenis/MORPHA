@@ -434,7 +434,8 @@ if [[ ! -s "${EXPANDED_VCF}" ]]; then
     exit 1
 fi
 
-# break down multiallelic records, left-align indels, set correct REF bases for shifted coordinates, and recombine back
+# break down multiallelic records, left-align indels, set correct REF bases for shifted coordinates
+# recombine any indels and SNPs (+both), but leave symbolic alleles alone because they need their own annotations (e.g. END field)
 NORMALIZED_VCF="${GENEDIR}/1kGP.SV-expanded-normalized.vcf.gz"
 bcftools norm \
     -f "${DATADIR}/${GRCh38REFFA}" \
@@ -442,7 +443,7 @@ bcftools norm \
     "${EXPANDED_VCF}" | \
 bcftools norm \
     -f "${DATADIR}/${GRCh38REFFA}" \
-    -m +any -Oz \
+    -m +both -Oz \
     -o "${NORMALIZED_VCF}" -
 # check if created and index
 if [[ ! -s "${NORMALIZED_VCF}" ]]; then
