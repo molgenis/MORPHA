@@ -13,8 +13,6 @@ PATHHAPLO="${RESULTDIR}/${GENE}_protein_path_haplotypes.fa"
 PDBDIR="${RESULTDIR}/folded"
 mkdir -p "${PDBDIR}"
 
-echo "Starting 10x structural ensemble generation..."
-
 # Iterate through both of your target FASTA files
 for FASTA_FILE in "${NORMALHAPLO}" "${PATHHAPLO}"; do
 
@@ -69,6 +67,7 @@ for FASTA_FILE in "${NORMALHAPLO}" "${PATHHAPLO}"; do
         [ -z "$VARIANT_NAME" ] && continue
 
         echo "  Processing variant: ${VARIANT_NAME} (${#AMINO_ACIDS} AA)..."
+        echo "  Sequence: ${AMINO_ACIDS}"
 
         PDB_OUTPUT="${PDBDIR}/${VARIANT_NAME}.pdb"
         PDB_TMP="${PDB_OUTPUT}.tmp"
