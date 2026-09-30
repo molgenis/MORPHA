@@ -37,13 +37,20 @@ while IFS=',' read -r gene np_id nm_id aa_length uniprot signal_start signal_end
         continue
     fi
 
-    # 1. Parse FASTA headers
+	# 1. Parse FASTA headers (Pure Bash - no pipe or xargs limit)
     EXPECTED_PDBS=()
     for fa_file in "${FASTA_FILES[@]}"; do
         while read -r line; do
+            # Strip leading '>'
             header="${line#>}"
-            header="$(echo "$header" | xargs)"
+            
+            # Trim leading/trailing whitespace
+            header="${header#"${header%%[![:space:]]*}"}"
+            header="${header%"${header##*[![:space:]]}"}"
+            
+            # Strip everything from the first pipe '|' onward
             id_only="${header%%|*}"
+            
             EXPECTED_PDBS+=("${id_only}.pdb")
         done < <(grep '^>' "$fa_file")
     done
