@@ -86,9 +86,9 @@ while IFS=',' read -r gene np_id nm_id aa_length uniprot signal_start signal_end
         echo "Mismatch detail for $gene:"
         echo "  Expected from FASTAs: ${SORTED_EXPECTED[*]}"
         echo "  Found in $FOLDED_DIR: ${SORTED_ACTUAL[*]}"
-        echo "Skipping FoldX for $gene."
+        echo "Quitting..."
         echo "--------------------------------------------------"
-        continue
+        exit 1
     fi
 
     echo "Validation PASSED: FASTA headers match existing PDB files (${#SORTED_EXPECTED[@]} files)."
