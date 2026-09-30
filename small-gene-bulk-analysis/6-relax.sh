@@ -21,14 +21,8 @@ get_completed_runs() {
         echo 0
         return
     fi
-    # Count lines starting with 'SCORE:', subtract 2 header lines
-    local line_count
-    line_count=$(grep -c '^SCORE:' "$score_file" || true)
-    if [ "$line_count" -gt 2 ]; then
-        echo $((line_count - 2))
-    else
-        echo 0
-    fi
+    # Count lines starting with 'SCORE:' but exclude header lines containing 'total_score'
+    grep '^SCORE:' "$score_file" | grep -v 'total_score' | wc -l
 }
 
 while IFS=',' read -r gene np_id nm_id aa_length uniprot signal_start signal_end signal_length status || [ -n "$gene" ]; do
