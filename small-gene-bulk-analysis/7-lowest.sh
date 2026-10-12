@@ -83,9 +83,12 @@ while IFS=',' read -r gene np_id nm_id aa_length uniprot signal_start signal_end
     # extract minimum total_score per scorefile
     # output file target: repo/results/$gene/${gene}_minimum_per_haplotype.csv
     OUTPUT_CSV_NAME="${gene}_minimum_per_haplotype.csv"
+    # also, extract all total_scores per scorefile in separate CSV
+    ALL_DG_OUTPUT_CSV_NAME="${gene}_all_dg_per_haplotype.csv"
 
     # Initialize file
     > "$GENE_DIR/$OUTPUT_CSV_NAME"
+    > "$GENE_DIR/$ALL_DG_OUTPUT_CSV_NAME"
 
     # change working dir to folded
     pushd "$FOLDED_DIR" > /dev/null || continue
@@ -99,6 +102,9 @@ while IFS=',' read -r gene np_id nm_id aa_length uniprot signal_start signal_end
         if [ -n "$min_score" ]; then
             # write to parent directory (results/$gene/)
             echo "${haplotype_id},${min_score}" >> "../$OUTPUT_CSV_NAME"
+
+            # also write all DG scores per haplotype to CSV, i.e. the outcomes of all N trajectories resulting from nstruct=N
+            grep '^SCORE:' "$sc_file" | grep -v 'total_score' | awk -v hid="$haplotype_id" '{print hid "," $2}' >> "../$ALL_DG_OUTPUT_CSV_NAME"
         else
             echo "ERROR: Could not extract total_score from $sc_file"
             exit 1
@@ -108,6 +114,7 @@ while IFS=',' read -r gene np_id nm_id aa_length uniprot signal_start signal_end
     # change working dir back to current
     popd > /dev/null
     echo "Finished generating CSV for $gene at repo/results/$gene/$OUTPUT_CSV_NAME."
+    echo "Finished generating CSV for $gene at repo/results/$gene/$ALL_DG_OUTPUT_CSV_NAME."
     echo "--------------------------------------------------"
 
 done < "$UNIPROTSIGNALOUT"
