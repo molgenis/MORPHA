@@ -104,7 +104,8 @@ while IFS=',' read -r gene np_id nm_id aa_length uniprot signal_start signal_end
             echo "${haplotype_id},${min_score}" >> "../$OUTPUT_CSV_NAME"
 
             # also write all DG scores per haplotype to CSV, i.e. the outcomes of all N trajectories resulting from nstruct=N
-            grep '^SCORE:' "$sc_file" | grep -v 'total_score' | awk -v hid="$haplotype_id" '{print hid "," $2}' >> "../$ALL_DG_OUTPUT_CSV_NAME"
+			scores=$(grep '^SCORE:' "$sc_file" | grep -v 'total_score' | awk '{print $2}' | paste -sd,)
+            echo "${haplotype_id},${scores}" >> "../$ALL_DG_OUTPUT_CSV_NAME"
         else
             echo "ERROR: Could not extract total_score from $sc_file"
             exit 1
