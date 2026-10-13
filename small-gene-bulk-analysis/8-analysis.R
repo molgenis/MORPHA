@@ -1,7 +1,11 @@
 library(R.utils)
 library(data.table)
+library(this.path)
+library(ggplot2)
 
-setwd("~/git/MORPHA/")
+script_dir <- this.dir()
+parent_dir <- dirname(script_dir)
+setwd(dirname(script_dir))
 
 #############################################
 # Read in the target genes of this analysis #
@@ -74,8 +78,9 @@ rownames(energy_min_per_haplo) <- NULL
 rownames(energy_all_per_haplo) <- NULL
 cat("Total haplotype x variant combinations in minimums:", dim(energy_min_per_haplo)[1], "\n")
 cat("Total haplotype x variant combinations in all DGs:", dim(energy_all_per_haplo)[1], "\n")
+cat("Total nr of delta Gibbs free energy estimates (in REU) per haplotype:", dim(energy_all_per_haplo)[2]-2, "\n")
 head(energy_min_per_haplo)
-energy_all_per_haplo[1:6,1:6]
+energy_all_per_haplo[1:10,1:6]
 
 ######################################################
 # Read in the protein haplotypes for 1kG individuals #
@@ -223,3 +228,88 @@ cat("Total nr of haplotypes:", dim(haplo_per_indiv)[1], "\n")
 haplo_per_indiv[1:5,]
 haplo_per_indiv[1:15,1:4]
 
+
+
+
+
+
+
+
+
+
+############################################################
+# Calculate DDG: pathogenic vs. base haplotypes
+############################################################
+
+# Convert data to data.table
+haplo_dt <- as.data.table(haplo_per_indiv)
+energy_dt <- as.data.table(energy_all_per_haplo)
+
+# Expand sample lists into individual haplotype records
+haplo_long <- rbindlist(
+  lapply(seq_len(nrow(haplo_dt)), function(i) {
+    sample_names <- strsplit( haplo_dt$samples[i], ",", fixed = TRUE )[[1]]
+    sample_names <- sample_names[nzchar(sample_names)]
+    data.table( gene = haplo_dt$gene[i], haplotype = haplo_dt$variant[i], variantID = haplo_dt$variantID[i], sample = sample_names )
+  }),
+  use.names = TRUE
+)
+
+# Separate base and pathogenic haplotypes
+base_haplotypes <- haplo_long[grepl("_protein_variant_[0-9]+$", haplotype)]
+path_haplotypes <- haplo_long[grepl("_protein_path_variant_[0-9]+$", haplotype)]
+
+# Match haplotypes by gene and individual chromosome
+matched_haplotypes <- merge(path_haplotypes, base_haplotypes, by = c("gene", "sample"), suffixes = c("_path", "_base"), allow.cartesian = TRUE)
+
+# Count shared samples for each matched haplotype pair
+haplotype_pairs <- matched_haplotypes[,.(n_shared_samples = uniqueN(sample)),by = .(gene,pathogenic_haplotype = haplotype_path,base_haplotype = haplotype_base,variantID = variantID_path)]
+
+# Calculate all 100 DDG estimates for each haplotype pair
+energy_dt <- as.data.table(energy_all_per_haplo)
+reu_cols <- paste0("REU", 1:100)
+stopifnot(all(reu_cols %in% names(energy_dt)))
+path_energy <- energy_dt[grepl("_protein_path_variant_[0-9]+$", haplotype), c("gene", "haplotype", reu_cols), with = FALSE]
+setnames(path_energy, "haplotype", "pathogenic_haplotype")
+base_energy <- energy_dt[grepl("_protein_variant_[0-9]+$", haplotype), c("gene", "haplotype", reu_cols), with = FALSE]
+setnames(base_energy, "haplotype", "base_haplotype")
+setnames(path_energy, reu_cols, paste0(reu_cols, "_path"))
+setnames(base_energy, reu_cols, paste0(reu_cols, "_base"))
+ddg_all <- merge(haplotype_pairs, path_energy, by = c("gene", "pathogenic_haplotype"), all.x = TRUE)
+ddg_all <- merge(ddg_all, base_energy, by = c("gene", "base_haplotype"), all.x = TRUE)
+
+# Calculate DDG1 through DDG100
+for (i in 1:100) { ddg_all[,(paste0("DDG", i)) :=get(paste0("REU", i, "_path")) -get(paste0("REU", i, "_base"))] }
+
+# Keep identifiers and the 100 DDG estimates
+ddg_cols <- paste0("DDG", 1:100)
+ddg_all <- ddg_all[,c("gene", "variantID", "pathogenic_haplotype", "base_haplotype", "n_shared_samples", ddg_cols), with = FALSE]
+setorder(ddg_all, gene, variantID, pathogenic_haplotype, base_haplotype)
+ddg_all[1:10,1:8]
+
+## PLOT
+
+# Convert DDG columns to long format
+ddg_long <- melt(
+  ddg_all,
+  id.vars = c(
+    "gene",
+    "variantID",
+    "pathogenic_haplotype",
+    "base_haplotype"
+  ),
+  measure.vars = paste0("DDG", 1:100),
+  variable.name = "estimate",
+  value.name = "DDG"
+)
+
+# Plot the distribution of all DDG estimates
+ggplot(ddg_long, aes(x = DDG)) +
+  geom_histogram(bins = 50, na.rm = TRUE) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  labs(
+    title = "Distribution of DDG estimates",
+    x = expression(Delta * Delta * G),
+    y = "Count"
+  ) +
+  theme_minimal()
