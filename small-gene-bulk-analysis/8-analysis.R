@@ -14,9 +14,9 @@ genes <- read.csv("small-gene-bulk-analysis/uniprot_signal_peptides.csv", string
 cat("Total gene targets:", dim(genes)[1], "\n")
 head(genes)
 
-########################
-# Read in variant VCFs #
-########################
+############################################
+# Read in their corresponding variant VCFs #
+############################################
 var_list <- list()
 for (i in seq_len(nrow(genes))) {
   gene <- genes$gene[i]
@@ -76,17 +76,18 @@ em_list<-NULL
 em_all_list<-NULL
 rownames(energy_min_per_haplo) <- NULL
 rownames(energy_all_per_haplo) <- NULL
-cat("Total haplotype x variant combinations in minimums:", dim(energy_min_per_haplo)[1], "\n")
-cat("Total haplotype x variant combinations in all DGs:", dim(energy_all_per_haplo)[1], "\n")
-cat("Total nr of delta Gibbs free energy estimates (in REU) per haplotype:", dim(energy_all_per_haplo)[2]-2, "\n")
+cat("Total 1kGP haplotypes in minimums:", sum(grepl("_protein_variant", energy_min_per_haplo$haplotype)), "\n")
+cat("Total 1kGP haplotypes in all DGs:", sum(grepl("_protein_variant", energy_all_per_haplo$haplotype)), "\n")
+cat("Total 1kGP hap x variant combinations in minimums:", sum(grepl("_protein_path_variant", energy_min_per_haplo$haplotype)), "\n")
+cat("Total 1kGP hap x variant combinations in all DGs:", sum(grepl("_protein_path_variant", energy_all_per_haplo$haplotype)), "\n")
+cat("Total nr of delta Gibbs REU estimate across all haplotype:", dim(energy_all_per_haplo)[2]-2, "\n")
 head(energy_min_per_haplo)
 energy_all_per_haplo[1:10,1:6]
 
-######################################################
-# Read in the protein haplotypes for 1kG individuals #
-######################################################
+#######################################################
+# Read in the protein haplotypes for 1kGP individuals #
+#######################################################
 haplo_list <- list()
-
 for (gene_name in unique(genes_and_variants$gene)) {
   
   # Paths to both FASTA files
@@ -221,95 +222,114 @@ for (gene_name in unique(genes_and_variants$gene)) {
 }
 
 haplo_per_indiv <- do.call(rbind, haplo_list)
-rownames(haplo_per_indiv) <- NULL
-haplo_list <- NULL
-df_wide <- NULL
+
+
+# since e have already separated 'variantID' from the sample/haplotype names, so remove duplicate samples
+haplo_per_indiv$samples <- sapply(haplo_per_indiv$samples, function(x) {
+  if (is.na(x) || x == "") return(x)
+  items <- unlist(strsplit(x, ",", fixed = TRUE))
+  unique_items <- unique(items)
+  paste(unique_items, collapse = ",")
+})
+
 cat("Total nr of haplotypes:", dim(haplo_per_indiv)[1], "\n")
-haplo_per_indiv[1:5,]
-haplo_per_indiv[1:15,1:4]
+genes_without_natural_variation <- haplo_per_indiv[grepl("_protein_variant_[0-9]+$", haplo_per_indiv[,"variant"]) & haplo_per_indiv[,"n"] == 6404, ]
+genes_without_natural_variation[,1:4]
+genes_to_drop <- genes_without_natural_variation$gene
+cat("Dropping",length(genes_to_drop),"genes without natural variation\n")
+haplo_per_indiv <- haplo_per_indiv[!haplo_per_indiv$gene %in% genes_to_drop, ]
+cat("Total nr of haplotypes now:", dim(haplo_per_indiv)[1], "\n")
+cat(" ..of which natural:", dim(haplo_per_indiv[grepl("_protein_variant_[0-9]+$", haplo_per_indiv[,"variant"]), ]), "\n")
+cat(" ..of which pathogenic:", dim(haplo_per_indiv[grepl("_protein_path_variant_[0-9]+$", haplo_per_indiv[,"variant"]), ]), "\n")
+#haplo_per_indiv[1:5,]
+#haplo_per_indiv[1:15,1:4]
 
+# cleanup
+rownames(haplo_per_indiv) <- haplo_list <- df_wide <- genes_without_natural_variation <- genes_to_drop <- NULL
 
+#multiple_varIDs <- subset(haplo_per_indiv, grepl(",", variantID, fixed = TRUE))
+#dim(multiple_varIDs)
+#multiple_varIDs[1:5,1:4]
 
+#all_natural_variation <- haplo_per_indiv[grepl("_protein_variant_[0-9]+$", haplo_per_indiv[,"variant"]), ]
+#all_induced_path_variation <- haplo_per_indiv[grepl("_protein_path_variant_[0-9]+$", haplo_per_indiv[,"variant"]), ]
 
+#dim(all_natural_variation)
+#colnames(all_natural_variation)
+#all_natural_variation[1:5,1:4]
 
+#dim(all_induced_path_variation)
+#all_induced_path_variation[1:5,1:4]
 
+############################################
+# Connect natural to pathogenic haplotypes #
+############################################
 
+dt <- copy(as.data.table(haplo_per_indiv))
+dt[, row_id := .I]
 
+# expand the comma-separated sample+allele identifiers and add gene, variant and variantID
+sample_long <- dt[, .(sample = trimws(unlist(strsplit(samples, ",", fixed = TRUE)))), by = row_id]
+sample_long <- merge(sample_long, dt[, .(row_id, gene, variant, variantID)], by = "row_id", all.x = TRUE)
 
+# split into natural and pathogenic protein haplotypes
+natural_long <- unique(sample_long[!grepl("_protein_path_variant_", variant, fixed = TRUE), .(gene, sample, natural_haplotype = variant)])
+pathogenic_long <- unique(sample_long[grepl("_protein_path_variant_", variant, fixed = TRUE), .(gene, sample, pathogenic_haplotype = variant, variantID)])
 
-############################################################
-# Calculate DDG: pathogenic vs. base haplotypes
-############################################################
+# validate that each gene + sample+allele combination has exactly one natural background
+natural_check <- natural_long[, .(n_natural = uniqueN(natural_haplotype)), by = .(gene, sample)][n_natural > 1]
+if (nrow(natural_check) > 0) { stop("Some gene/sample combinations map to multiple natural haplotypes.") }
 
-# Convert data to data.table
-haplo_dt <- as.data.table(haplo_per_indiv)
-energy_dt <- as.data.table(energy_all_per_haplo)
+# grab and attach the natural background for the pathogenic haplotypes, since we know they are unique by gene x sample combination
+matched <- merge(pathogenic_long, natural_long, by = c("gene", "sample"), allow.cartesian = TRUE)
 
-# Expand sample lists into individual haplotype records
-haplo_long <- rbindlist(
-  lapply(seq_len(nrow(haplo_dt)), function(i) {
-    sample_names <- strsplit( haplo_dt$samples[i], ",", fixed = TRUE )[[1]]
-    sample_names <- sample_names[nzchar(sample_names)]
-    data.table( gene = haplo_dt$gene[i], haplotype = haplo_dt$variant[i], variantID = haplo_dt$variantID[i], sample = sample_names )
-  }),
-  use.names = TRUE
-)
+# collapse into one row per unique combination of gene, natural haplotype, pathogenic haplotype, and variantID
+haplotype_relationships <- matched[, .(n_shared_sample_alleles = uniqueN(sample)), by = .(gene, natural_haplotype, pathogenic_haplotype, variantID)]
 
-# Separate base and pathogenic haplotypes
-base_haplotypes <- haplo_long[grepl("_protein_variant_[0-9]+$", haplotype)]
-path_haplotypes <- haplo_long[grepl("_protein_path_variant_[0-9]+$", haplotype)]
+# expanded mapping of variantID to corresponding pathogenic allele
+pathogenic_variant_map <- unique(dt[grepl("_protein_path_variant_", variant, fixed = TRUE), .(gene, pathogenic_haplotype = variant, variantID)])[, .(variantID = trimws(unlist(strsplit(variantID, ",", fixed = TRUE)))), by = .(gene, pathogenic_haplotype)]
 
-# Match haplotypes by gene and individual chromosome
-matched_haplotypes <- merge(path_haplotypes, base_haplotypes, by = c("gene", "sample"), suffixes = c("_path", "_base"), allow.cartesian = TRUE)
+# cleanup
+dt <- sample_long <- natural_long <- pathogenic_long <- natural_check <- matched <- NULL
 
-# Count shared samples for each matched haplotype pair
-haplotype_pairs <- matched_haplotypes[,.(n_shared_samples = uniqueN(sample)),by = .(gene,pathogenic_haplotype = haplotype_path,base_haplotype = haplotype_base,variantID = variantID_path)]
+cat("Nr of haplotype relationships:",dim(haplotype_relationships)[1],"\n")
+cat("Nr of unique pathogenic haplotypes represented:",length(unique(haplotype_relationships$pathogenic_haplotype)),"\n")
+cat("Nr of variants affecting alleles:",dim(pathogenic_variant_map)[1],"\n")
 
-# Calculate all 100 DDG estimates for each haplotype pair
-energy_dt <- as.data.table(energy_all_per_haplo)
+#####################################################
+# Add DG and DDG for pathogenic and base haplotypes #
+#####################################################
+
+# convert to data table
+setDT(energy_all_per_haplo)
+
+# the 100 energy columns
 reu_cols <- paste0("REU", 1:100)
-stopifnot(all(reu_cols %in% names(energy_dt)))
-path_energy <- energy_dt[grepl("_protein_path_variant_[0-9]+$", haplotype), c("gene", "haplotype", reu_cols), with = FALSE]
-setnames(path_energy, "haplotype", "pathogenic_haplotype")
-base_energy <- energy_dt[grepl("_protein_variant_[0-9]+$", haplotype), c("gene", "haplotype", reu_cols), with = FALSE]
-setnames(base_energy, "haplotype", "base_haplotype")
-setnames(path_energy, reu_cols, paste0(reu_cols, "_path"))
-setnames(base_energy, reu_cols, paste0(reu_cols, "_base"))
-ddg_all <- merge(haplotype_pairs, path_energy, by = c("gene", "pathogenic_haplotype"), all.x = TRUE)
-ddg_all <- merge(ddg_all, base_energy, by = c("gene", "base_haplotype"), all.x = TRUE)
 
-# Calculate DDG1 through DDG100
-for (i in 1:100) { ddg_all[,(paste0("DDG", i)) :=get(paste0("REU", i, "_path")) -get(paste0("REU", i, "_base"))] }
+# check that each gene + haplotype has exactly one energy row
+if (energy_all_per_haplo[, .N, by = .(gene, haplotype)][N > 1, .N] > 0) { stop("energy_all_per_haplo has duplicate gene + haplotype keys.") }
 
-# Keep identifiers and the 100 DDG estimates
-ddg_cols <- paste0("DDG", 1:100)
-ddg_all <- ddg_all[,c("gene", "variantID", "pathogenic_haplotype", "base_haplotype", "n_shared_samples", ddg_cols), with = FALSE]
-setorder(ddg_all, gene, variantID, pathogenic_haplotype, base_haplotype)
-ddg_all[1:10,1:8]
+# prepare natural and pathogenic haplotype energies
+natural_energy <- copy(energy_all_per_haplo[, c("gene", "haplotype", reu_cols), with = FALSE])
+setnames(natural_energy, old = c("haplotype", reu_cols), new = c("natural_haplotype", paste0(reu_cols, "_natural")))
+pathogenic_energy <- copy(energy_all_per_haplo[, c("gene", "haplotype", reu_cols), with = FALSE])
+setnames(pathogenic_energy, old = c("haplotype", reu_cols), new = c("pathogenic_haplotype", paste0(reu_cols, "_pathogenic")))
 
-## PLOT
+# add natural and pathogenic haplotype energies
+haplotype_relationships <- merge(haplotype_relationships, natural_energy, by = c("gene", "natural_haplotype"), all.x = TRUE, sort = FALSE)
+haplotype_relationships <- merge(haplotype_relationships, pathogenic_energy, by = c("gene", "pathogenic_haplotype"), all.x = TRUE, sort = FALSE)
 
-# Convert DDG columns to long format
-ddg_long <- melt(
-  ddg_all,
-  id.vars = c(
-    "gene",
-    "variantID",
-    "pathogenic_haplotype",
-    "base_haplotype"
-  ),
-  measure.vars = paste0("DDG", 1:100),
-  variable.name = "estimate",
-  value.name = "DDG"
-)
+# calculate DDG for each corresponding REU pair, i.e. pathogenic energy - natural energy
+for (i in 1:100) {
+  set( haplotype_relationships, j = paste0("DDG", i), value = haplotype_relationships[[paste0("REU", i, "_pathogenic")]] - haplotype_relationships[[paste0("REU", i, "_natural")]] )
+}
 
-# Plot the distribution of all DDG estimates
-ggplot(ddg_long, aes(x = DDG)) +
-  geom_histogram(bins = 50, na.rm = TRUE) +
-  geom_vline(xintercept = 0, linetype = "dashed") +
-  labs(
-    title = "Distribution of DDG estimates",
-    x = expression(Delta * Delta * G),
-    y = "Count"
-  ) +
-  theme_minimal()
+# cleanup
+natural_energy <- pathogenic_energy <- reu_cols <- NULL
+
+########################
+# Test for significance
+###################
+
+
+
