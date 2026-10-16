@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Target total trajectories per input PDB
-TARGET_NSTRUCT=10
+TARGET_NSTRUCT=100
 
 # Remember where we started
 CURRENT_DIR="$(pwd)"
