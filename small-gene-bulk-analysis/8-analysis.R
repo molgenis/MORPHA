@@ -293,12 +293,12 @@ pathogenic_energy <- copy(energy_all_per_haplo[, c("gene", "haplotype", reu_cols
 setnames(pathogenic_energy, old = c("haplotype", reu_cols), new = c("pathogenic_haplo", paste0(reu_cols, "_pathogenic")))
 
 # add natural and pathogenic haplotype energies
-haplo_link_collapse_unique_pairs <- merge(haplo_link_collapse_unique_pairs, natural_energy, by = c("gene", "natural_haplo"), all.x = TRUE, sort = FALSE)
-haplo_link_collapse_unique_pairs <- merge(haplo_link_collapse_unique_pairs, pathogenic_energy, by = c("gene", "pathogenic_haplo"), all.x = TRUE, sort = FALSE)
+haplo_link_expanded <- merge(haplo_link_expanded, natural_energy, by = c("gene", "natural_haplo"), all.x = TRUE, sort = FALSE)
+haplo_link_expanded <- merge(haplo_link_expanded, pathogenic_energy, by = c("gene", "pathogenic_haplo"), all.x = TRUE, sort = FALSE)
 
 # calculate DDG for each corresponding REU pair, i.e. pathogenic energy - natural energy
 for (i in 1:100) {
-  set( haplo_link_collapse_unique_pairs, j = paste0("DDG", i), value = haplo_link_collapse_unique_pairs[[paste0("REU", i, "_pathogenic")]] - haplo_link_collapse_unique_pairs[[paste0("REU", i, "_natural")]] )
+  set( haplo_link_expanded, j = paste0("DDG", i), value = haplo_link_expanded[[paste0("REU", i, "_pathogenic")]] - haplo_link_expanded[[paste0("REU", i, "_natural")]] )
 }
 
 # cleanup
@@ -308,48 +308,34 @@ natural_energy <- pathogenic_energy <- reu_cols <- NULL
 # Test for significance IN PROGRESS...
 ##########################
 
-# cleanup of table
-dim(haplotype_relationships)
+# remove DG columns, no longer needed
+dim(haplo_link_expanded)
 reu_natural_cols <- paste0("REU", 1:100, "_natural")
-haplotype_relationships[, (reu_natural_cols) := NULL]
+haplo_link_expanded[, (reu_natural_cols) := NULL]
 reu_path_cols <- paste0("REU", 1:100, "_pathogenic")
-haplotype_relationships[, (reu_path_cols) := NULL]
-dim(haplotype_relationships)
-haplotype_relationships[c(1:5,50:55), 1:5]
-subset(haplotype_relationships, gene=="COX7B")[,1:8]
+haplo_link_expanded[, (reu_path_cols) := NULL]
+dim(haplo_link_expanded)
+
+# grab all energy columns (DDG1 to DDG100)
+ddg_cols <- grep("^DDG[0-9]+$", names(haplo_link_expanded), value = TRUE)
 
 
+# 3. Melt the wide DDG columns into long format, keeping variantID, gene, and the groups (haplo_pair)
+# We create 'haplo_pair' to group distinct natural-pathogenic trajectories per variant
+haplo_link_expanded[, haplo_pair := paste(natural_haplo, pathogenic_haplo, sep = "__vs__")]
 
-
-
-# 1. Ensure your base table is a data.table
-setDT(haplotype_relationships)
-
-# 2. Automatically detect all trajectory columns (DDG1 to DDG100)
-ddg_cols <- grep("^DDG[0-9]+$", names(haplotype_relationships), value = TRUE)
-
-# 3. Vectorized explosion of comma-separated variantIDs
-split_ids <- strsplit(as.character(haplotype_relationships$variantID), ",")
-row_lens  <- sapply(split_ids, length)
-expanded_dt <- haplotype_relationships[rep(seq_len(.N), row_lens)]
-expanded_dt[, variantID := trimws(unlist(split_ids))]
-
-# 4. Create a combined natural-pathogenic pair column for grouping
-expanded_dt[, haplo_pair := paste(natural_haplotype, pathogenic_haplotype, sep = "__vs__")]
-
-# 5. Melt the wide DDG columns into a long format for statistical testing
 long_dt <- melt(
-  expanded_dt,
-  id.vars = c("gene", "variantID", "pathogenic_haplotype", "natural_haplotype", "haplo_pair", "n_shared_sample_alleles"),
+  haplo_link_expanded,
+  id.vars = c("gene", "variantID", "haplo_pair"),
   measure.vars = ddg_cols,
   variable.name = "trajectory",
   value.name = "DDG"
 )
 
-# Filter out missing values to prevent test failures
+# Filter out missing values to prevent test errors
 long_dt <- long_dt[!is.na(variantID) & !is.na(DDG)]
 
-# 6. Run Kruskal-Wallis test and calculate Epsilon-squared effect size per variantID
+# 4. Run Kruskal-Wallis test and calculate Epsilon-squared effect size per variantID
 variant_results <- long_dt[, {
   k <- uniqueN(haplo_pair)
   n <- .N
@@ -365,41 +351,29 @@ variant_results <- long_dt[, {
     eps_sq <- max(0, min(1, eps_sq, na.rm = TRUE), na.rm = TRUE)
     
     list(
-      statistic  = as.numeric(h_stat),
-      df         = as.numeric(kt$parameter),
-      p_value    = as.numeric(p_val),
-      epsilon_sq = as.numeric(eps_sq),
-      n_obs      = as.integer(n),
-      n_groups   = as.integer(k)
+      pvalue      = as.numeric(p_val),
+      effectsize  = as.numeric(eps_sq),
+      n_groups    = as.integer(k)
     )
   } else {
     list(
-      statistic  = NA_real_,
-      df         = NA_real_,
-      p_value    = NA_real_,
-      epsilon_sq = NA_real_,
-      n_obs      = as.integer(n),
-      n_groups   = as.integer(k)
+      pvalue      = NA_real_,
+      effectsize  = NA_real_,
+      n_groups    = as.integer(k)
     )
   }
-}, by = variantID]
+}, by = .(gene, variantID)]
 
-# 7. Apply Bonferroni Multiple Testing Correction and 1% Significance Flag
-variant_results[!is.na(p_value), adj_p_value := p.adjust(p_value, method = "bonferroni")]
+# apply Bonferroni nultiple testing correction and 1% significance
+variant_results[!is.na(pvalue), adj_p_value := p.adjust(pvalue, method = "bonferroni")]
+variant_results[, significant_bonf_1pct := fifelse(is.na(adj_p_value), NA_character_, fifelse(adj_p_value < 0.01, "YES", "NO"))]
+pct_summary <- variant_results[, .N, by = significant_bonf_1pct][, percentage := (N / sum(N)) * 100]
+print(pct_summary)
 
-variant_results[, significant_bonf_1pct := fifelse(
-  is.na(adj_p_value), 
-  NA_character_, 
-  fifelse(adj_p_value < 0.01, "YES", "NO")
-)]
+# visualization of the results (Volcano-style plot, highlighting Bonferroni hits)
+variant_results[, neg_log_p := -log10(pvalue)]
 
-# 8. Preview results with the new significance column
-print(head(variant_results[!is.na(p_value)], 10))
-
-# 9. Quick visualization of the results (Volcano-style plot, highlighting Bonferroni hits)
-variant_results[, neg_log_p := -log10(p_value)]
-
-ggplot(variant_results[is.finite(neg_log_p)], aes(x = epsilon_sq, y = neg_log_p, color = significant_bonf_1pct)) +
+ggplot(variant_results[is.finite(neg_log_p)], aes(x = effectsize, y = neg_log_p, color = significant_bonf_1pct)) +
   geom_point(alpha = 0.7, size = 2) +
   scale_color_manual(values = c("NO" = "steelblue", "YES" = "firebrick")) +
   labs(
@@ -414,21 +388,11 @@ ggplot(variant_results[is.finite(neg_log_p)], aes(x = epsilon_sq, y = neg_log_p,
 
 
 
-
-
-
-
-
-
-
-
-
-
 # Pick a specific variantID from your results to inspect
-target_variant <- variant_results[order(p_value)][1, variantID] # selects the most significant one
+target_variant <- variant_results[order(pvalue)][1, variantID] # selects the most significant one
 target_variant <- "987020"
 
-ggplot(long_dt[variantID == target_variant], aes(x = pathogenic_haplotype, y = DDG, fill = pathogenic_haplotype)) +
+ggplot(long_dt[variantID == target_variant], aes(x = haplo_pair, y = DDG, fill = haplo_pair)) +
   geom_boxplot(alpha = 0.7, outlier.shape = NA) +
   geom_jitter(width = 0.2, size = 1, alpha = 0.4) +
   labs(
