@@ -42,6 +42,6 @@ fi
 while IFS=',' read -r gene np_id nm_id aa_length uniprot signal_start signal_end signal_length status || [ -n "$gene" ]; do
     [ "$gene" = "gene" ] && continue
 
-    #./genename2foldedhaplo.sh "$gene"
+    ./genename2foldedhaplo.sh "$gene"
 
 done < "$CURRENT_DIR/$UNIPROTSIGNALOUT"
