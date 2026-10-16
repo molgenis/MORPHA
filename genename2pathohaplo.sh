@@ -390,10 +390,9 @@ else
               }
 
               # Trim signal peptide from the front (start at position cutoff + 1)
+              # In the exceptional case of the signal peptide containing a stop codon, we keep what is left of the signal peptide instead
               if (cutoff > 0 && length(full_seq) > cutoff) {
                   full_seq = substr(full_seq, cutoff + 1)
-              } else if (cutoff > 0 && length(full_seq) <= cutoff) {
-                  full_seq = ""
               }
 
               print full_seq
@@ -402,7 +401,7 @@ else
 
       if [ -z "$seq" ]; then
           # If stop codon or signal cutoff renders sequence empty
-          echo "ERROR: Protein sequence for $id is empty (possible immediate stop codon or cutoff exceeds length)" >&2
+          echo "ERROR: Protein sequence for $id is empty (possible immediate stop codon)" >&2
           exit 1
       fi
 
