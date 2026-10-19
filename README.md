@@ -200,3 +200,6 @@ cd small-gene-bulk-analysis/
 dos2unix *.sh
 ./3-reconstruct-1kg-patho-haplotypes.sh
 ```
+
+# Small gene bulk analysis notes
+The FoldX-repaired FXYD2_protein_variant_1 structure (MTGLSMDGGGSPKGDVDPFYYDYETVRNGGLIFAGLAFIVGLLILLSRRFRCGGNKKRRQINEDEP) has likely severe clashes or another problem that causes Rosetta to output a steady +458 REU instead of expected -/+20 REU. To solve this, we use the original (unrepaired) structure created by ESMFold in this instance.
