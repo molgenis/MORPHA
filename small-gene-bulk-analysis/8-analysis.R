@@ -364,15 +364,208 @@ variant_results <- long_dt[, {
   }
 }, by = .(gene, variantID)]
 
-# apply Bonferroni nultiple testing correction and 1% significance
+# apply Bonferroni nultiple testing correction and 1% significance on variant level
 variant_results[!is.na(pvalue), adj_p_value := p.adjust(pvalue, method = "bonferroni")]
 variant_results[, significant_bonf_1pct := fifelse(is.na(adj_p_value), NA_character_, fifelse(adj_p_value < 0.01, "YES", "NO"))]
 pct_summary <- variant_results[, .N, by = significant_bonf_1pct][, percentage := (N / sum(N)) * 100]
 print(pct_summary)
 
-# visualization of the results (Volcano-style plot, highlighting Bonferroni hits)
-variant_results[, neg_log_p := -log10(pvalue)]
+# summarize on gene level
+gene_significance <- variant_results[, .(has_significant_variant = any(significant_bonf_1pct == "YES")), by = gene]
+gene_pct_summary <- gene_significance[, .N, by = has_significant_variant][, percentage := (N / sum(N)) * 100]
+print(gene_pct_summary)
 
+# Merge variant_results into haplo_link_expanded using gene and variantID
+haplo_link_expanded_merged <- merge(
+  haplo_link_expanded,
+  variant_results,
+  by = c("gene", "variantID"),
+  all.x = TRUE # Keeps all rows from your expanded table
+)
+
+# Merge minimum DG values
+setDT(energy_min_per_haplo)
+nat_reu <- energy_min_per_haplo[, .(gene, haplotype, REU_natural = REU)]
+path_reu <- energy_min_per_haplo[, .(gene, haplotype, REU_pathogenic = REU)]
+haplo_link_expanded_merged <- merge(haplo_link_expanded_merged, nat_reu, by.x = c("gene", "natural_haplo"), by.y = c("gene", "haplotype"), all.x = TRUE)
+haplo_link_expanded_merged <- merge(haplo_link_expanded_merged, path_reu, by.x = c("gene", "pathogenic_haplo"),  by.y = c("gene", "haplotype"), all.x = TRUE)
+# remove DDG for ease of plotting
+ddg_cols <- paste0("DDG",1:100)
+haplo_link_expanded_merged[, (ddg_cols) := NULL]
+
+
+############################
+# Visualization of results #
+############################
+### simple plot
+ggplot(haplo_link_expanded_merged, aes(x = REU_natural, y = REU_pathogenic, color = significant_bonf_1pct)) +
+  geom_point(alpha = 0.7, size = 2) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
+  scale_color_manual(values = c("YES" = "red", "NO" = "grey60")) +
+  labs(
+    title = "Natural vs. Pathogenic Haplotype Energy (REU)",
+    subtitle = "Colored by 1% Bonferroni-corrected significance",
+    x = "Natural Haplotype REU",
+    y = "Pathogenic Haplotype REU",
+    color = "Significant (1% Bonf)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 12),
+    legend.position = "right"
+  )
+
+# color genes
+n_genes <- uniqueN(haplo_link_expanded_merged$gene)
+gene_colors <- hcl.colors(n_genes, palette = "Zissou") # Zissou, Fall, Earth, Temps, Geyser, Terrain, Plasma, Berlin, Dynamic, Spectral, Viridis, Heat, ..
+ggplot(haplo_link_expanded_merged, aes(x = REU_natural, y = REU_pathogenic, color = gene)) +
+  geom_point(alpha = 0.8, size = 2.5) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
+  scale_color_manual(values = gene_colors) +
+  labs(
+    title = "Natural vs. Pathogenic Haplotype Energy (REU) by Gene",
+    x = "Natural Haplotype REU",
+    y = "Pathogenic Haplotype REU",
+    color = "Gene"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 12),
+    legend.position = "right"
+  )
+
+## MINI PANELS!
+library(ggplot2)
+n_genes <- uniqueN(haplo_link_expanded_merged$gene)
+gene_colors <- hcl.colors(n_genes, palette = "Dynamic") # "Dynamic" spreads hues well
+ggplot(haplo_link_expanded_merged, aes(x = REU_natural, y = REU_pathogenic, color = gene)) +
+  geom_point(alpha = 0.8, size = 1.5) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
+  facet_wrap(~ gene, scales = "free") +  # Creates a separate panel for each of the 56 genes
+  scale_color_manual(values = gene_colors) +
+  labs(
+    title = "Natural vs. Pathogenic Haplotype Energy (REU) by Gene",
+    x = "Natural Haplotype REU",
+    y = "Pathogenic Haplotype REU"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 12),
+    legend.position = "none", # Hide legend since panels are labeled by gene name!
+    strip.text = element_text(face = "bold", size = 9)
+  )
+
+# MINI PANELS FOR HAPLO PAIRS
+library(ggplot2)
+ggplot(long_dt, aes(x = haplo_pair, y = DDG, fill = as.factor(variantID))) +
+  geom_boxplot(alpha = 0.8, outlier.shape = NA, position = position_dodge(0.8)) +
+  geom_jitter(
+    aes(color = as.factor(variantID)), 
+    size = 0.7, 
+    alpha = 0.3, 
+    position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.8)
+  ) +
+  facet_wrap(~ gene, scales = "free") +
+  labs(
+    title = "Trajectory Stability Distribution (DDG) by Haplotype Pair & Variant",
+    subtitle = "Faceted by gene; colored by Variant ID",
+    x = "Haplotype Pairs (Natural vs Pathogenic)",
+    y = "DDG (Pathogenic - Natural REU)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 12),
+    axis.text.x = element_blank(),  # Hides crowded haplotype pair text labels
+    axis.ticks.x = element_blank(),
+    legend.position = "none",       # Disables the legend completely
+    strip.text = element_text(face = "bold", size = 8)
+  )
+
+
+
+# with labels instead of legend
+library(data.table)
+library(ggplot2)
+library(ggrepel)
+genes <- sort(unique(haplo_link_expanded_merged$gene))
+gene_colors <- setNames(
+  hcl.colors(length(genes), palette = "Zissou"),
+  genes
+)
+gene_labels <- haplo_link_expanded_merged[
+  ,
+  .(
+    REU_natural = median(REU_natural, na.rm = TRUE),
+    REU_pathogenic = median(REU_pathogenic, na.rm = TRUE)
+  ),
+  by = gene
+]
+
+ggplot(
+  haplo_link_expanded_merged,
+  aes(x = REU_natural, y = REU_pathogenic, color = gene)
+) +
+  geom_point(alpha = 0.45, size = 2) +
+  
+  geom_abline(
+    intercept = 0,
+    slope = 1,
+    linetype = "dashed",
+    color = "grey60"
+  ) +
+  
+  geom_label_repel(
+    data = gene_labels,
+    aes(
+      x = REU_natural,
+      y = REU_pathogenic,
+      label = gene,
+      color = gene
+    ),
+    inherit.aes = FALSE,
+    
+    # Label appearance
+    fill = "white",
+    alpha = 0.95,
+    fontface = "bold",
+    size = 3,
+    label.size = 0.35,
+    label.padding = unit(0.25, "lines"),
+    label.r = unit(0.15, "lines"),
+    
+    # Smart positioning
+    box.padding = 0.8,
+    point.padding = 0.6,
+    force = 3,
+    force_pull = 0.5,
+    max.overlaps = Inf,
+    max.iter = 100000,
+    max.time = 5,
+    
+    # Connector lines
+    min.segment.length = 0,
+    segment.color = "grey45",
+    segment.size = 0.4,
+    segment.alpha = 0.8,
+    
+    show.legend = FALSE
+  ) +
+  
+  scale_color_manual(values = gene_colors) +
+  labs(
+    title = "Natural vs. Pathogenic Haplotype Energy (REU) by Gene",
+    x = "Natural Haplotype REU",
+    y = "Pathogenic Haplotype REU"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 12),
+    legend.position = "none",
+    panel.grid.minor = element_blank()
+  )
+
+# visualization of the pvalues vs effect size (Volcano-style plot, highlighting Bonferroni hits)
+variant_results[, neg_log_p := -log10(pvalue)]
 ggplot(variant_results[is.finite(neg_log_p)], aes(x = effectsize, y = neg_log_p, color = significant_bonf_1pct)) +
   geom_point(alpha = 0.7, size = 2) +
   scale_color_manual(values = c("NO" = "steelblue", "YES" = "firebrick")) +
@@ -386,11 +579,9 @@ ggplot(variant_results[is.finite(neg_log_p)], aes(x = effectsize, y = neg_log_p,
   theme_minimal()
 
 
-
-
 # Pick a specific variantID from your results to inspect
 target_variant <- variant_results[order(pvalue)][1, variantID] # selects the most significant one
-target_variant <- "987020"
+target_variant <- "7684"
 
 ggplot(long_dt[variantID == target_variant], aes(x = haplo_pair, y = DDG, fill = haplo_pair)) +
   geom_boxplot(alpha = 0.7, outlier.shape = NA) +
