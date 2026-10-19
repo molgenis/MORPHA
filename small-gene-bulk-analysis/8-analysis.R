@@ -423,9 +423,9 @@ ggplot(haplo_link_expanded_merged, aes(x = REU_natural, y = REU_pathogenic, colo
   geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
   scale_color_manual(values = gene_colors) +
   labs(
-    title = "Natural vs. Pathogenic Haplotype Energy (REU) by Gene",
-    x = "Natural Haplotype REU",
-    y = "Pathogenic Haplotype REU",
+    title = "Natural vs. pathogenic haplotype energy by gene (one or more variants each)",
+    x = "Natural haplotype REU",
+    y = "Pathogenic haplotype REU",
     color = "Gene"
   ) +
   theme_minimal() +
