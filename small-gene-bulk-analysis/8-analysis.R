@@ -394,13 +394,31 @@ haplo_link_expanded_merged <- merge(haplo_link_expanded_merged, path_reu, by.x =
 #ddg_cols <- paste0("DDG",1:100)
 #haplo_link_expanded_merged[, (ddg_cols) := NULL]
 
+# Helper function to handle both named palettes and custom color vectors/gradients
+get_palette_colors <- function(n, pal_spec) {
+  n <- max(n, 1)
+  if (length(pal_spec) == 1) {
+    # Match case-insensitively and ignore spaces against built-in HCL palettes
+    all_pals <- hcl.pals()
+    matched_pal <- all_pals[tolower(gsub("[[:space:]]", "", all_pals)) == tolower(gsub("[[:space:]]", "", pal_spec))]
+    if (length(matched_pal) > 0) {
+      return(hcl.colors(n, palette = matched_pal[1]))
+    }
+  }
+  # If it's a custom vector of colors, create a smooth interpolated gradient
+  if (length(pal_spec) == 1) {
+    rep(pal_spec, n)
+  } else {
+    grDevices::colorRampPalette(pal_spec)(n)
+  }
+}
 
 ############################
 # Visualization of results #
 ############################
-
-natuhap_pal <- "Dark3" # Zissou, Fall, Earth, Temps, Geyser, Terrain, Plasma, Berlin, Dynamic, Spectral, Viridis, Heat, ..
-variant_pal <- "Zissou1" # Mako + Earth? Rocket?
+# Define palettes: use named HCL palettes (e.g., "Dark 3", "Zissou1") or custom color vectors (e.g., c("#FF0000", "#FFFFFF"))
+natuhap_pal <- c("lightgray", "black")
+variant_pal <- c("darkred", "darkblue")
 
 haplo_link_expanded_merged_signf <- subset(haplo_link_expanded_merged, significant_bonf_1pct=="YES")
 haplo_link_expanded_merged_signf_effsz <- subset(haplo_link_expanded_merged_signf, effectsize > 0.5)
@@ -425,20 +443,20 @@ long_all <- long_all[!is.na(DDG) & !is.na(variantID)]
 # 3. Dynamically assign color fills and borders per gene
 long_all[, variant_fill := {
   vars <- unique(variantID)
-  pal_vars <- hcl.colors(max(length(vars), 1), palette = variant_pal)
+  pal_vars <- get_palette_colors(length(vars), variant_pal)
   pal_vars[match(variantID, vars)]
 }, by = gene]
 
 long_all[, natural_border := {
   nats <- unique(natural_haplo)
-  pal_nats <- hcl.colors(max(length(nats), 1), palette = natuhap_pal)
+  pal_nats <- get_palette_colors(length(nats), natuhap_pal)
   pal_nats[match(natural_haplo, nats)]
 }, by = gene]
 
 # 4. Build single-line HTML-colored panel labels (showing first 3 + count of remaining if >3 variants)
 gene_labels <- long_all[, {
   vars <- sort(unique(variantID))
-  pal_vars <- hcl.colors(max(length(vars), 1), palette = variant_pal)
+  pal_vars <- get_palette_colors(length(vars), variant_pal)
   
   if (length(vars) > 3) {
     colored_vars <- sapply(1:3, function(i) {
