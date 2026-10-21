@@ -3,6 +3,7 @@ library(data.table)
 library(this.path)
 library(ggplot2)
 library(ggtext)
+library(ggbeeswarm)
 
 script_dir <- this.dir()
 parent_dir <- dirname(script_dir)
@@ -417,8 +418,8 @@ get_palette_colors <- function(n, pal_spec) {
 # Visualization of results #
 ############################
 # Define palettes: use named HCL palettes (e.g., "Dark 3", "Zissou1") or custom color vectors (e.g., c("#FF0000", "#FFFFFF"))
-natuhap_pal <- c("lightgray", "black")
-variant_pal <- c("darkred", "darkblue")
+natuhap_pal <- c("white", "#505050")
+variant_pal <- c("red", "blue")
 
 haplo_link_expanded_merged_signf <- subset(haplo_link_expanded_merged, significant_bonf_1pct=="YES")
 haplo_link_expanded_merged_signf_effsz <- subset(haplo_link_expanded_merged_signf, effectsize > 0.5)
@@ -483,11 +484,11 @@ long_all[, pair_id := factor(pair_id, levels = pair_summary$pair_id)]
 
 # 6. Render Multi-Panel Plot with Updated Headers
 ggplot(long_all, aes(x = pair_id, y = DDG, fill = natural_border, color = variant_fill)) +
-  geom_violin(scale = "width", alpha = 0.7, trim = FALSE, linewidth = 0.4) +
-  #geom_boxplot(width = 0.1, color = "black", outlier.shape = NA, alpha = 0.7,position = position_dodge(0.7)) +
+  geom_violin(scale = "width", alpha = 1.0, trim = FALSE, linewidth = 0.4,color="black") +
+  #geom_boxplot(width = 0.2, outlier.shape = NA, alpha = 0.7,position = position_dodge(0.7)) +
   #geom_jitter(size = 0.9, alpha = 0.5, position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.8)) +
-  geom_sina(alpha = 0.6, size = .5, maxwidth = 0.5) +
-  #geom_quasirandom(shape = 21,  size = 1, alpha = 0.5, width = 0.3, stroke = 0.4) +
+  #geom_sina(alpha = 0.3, size = .5, maxwidth = 0.5) +
+  geom_quasirandom(shape = 19,  size = 0.1, alpha = 1.0, width = 0.2, stroke = 0.5) +
   facet_wrap(~ panel_label, scales = "free", ncol = 4) +
   scale_fill_identity() +   
   scale_color_identity() + 
