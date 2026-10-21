@@ -421,11 +421,13 @@ get_palette_colors <- function(n, pal_spec) {
 natuhap_pal <- c("white", "#505050")
 variant_pal <- c("red", "blue")
 
-haplo_link_expanded_merged_signf <- subset(haplo_link_expanded_merged, significant_bonf_1pct=="YES")
-haplo_link_expanded_merged_signf_effsz <- subset(haplo_link_expanded_merged_signf, effectsize > 0.5)
+haplo_link_expanded_merged_filter <- haplo_link_expanded_merged
+haplo_link_expanded_merged_filter <- subset(haplo_link_expanded_merged, significant_bonf_1pct=="YES")
+#haplo_link_expanded_merged_filter <- subset(haplo_link_expanded_merged_filter, effectsize > 0.5)
 
 # 1. Prepare data and strip table keys
-dt_all <- copy(haplo_link_expanded_merged_signf_effsz)
+dt_all <- copy(haplo_link_expanded_merged_filter)
+haplo_link_expanded_merged_filter <- NULL
 setkey(dt_all, NULL)
 dt_all[, pair_id := .I]
 
@@ -483,13 +485,13 @@ setorder(pair_summary, panel_label, variantID, mean_DDG)
 long_all[, pair_id := factor(pair_id, levels = pair_summary$pair_id)]
 
 # 6. Render Multi-Panel Plot with Updated Headers
-ggplot(long_all, aes(x = pair_id, y = DDG, fill = natural_border, color = variant_fill)) +
+p <- ggplot(long_all, aes(x = pair_id, y = DDG, fill = natural_border, color = variant_fill)) +
   geom_violin(scale = "width", alpha = 1.0, trim = FALSE, linewidth = 0.4,color="black") +
   #geom_boxplot(width = 0.2, outlier.shape = NA, alpha = 0.7,position = position_dodge(0.7)) +
   #geom_jitter(size = 0.9, alpha = 0.5, position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.8)) +
   #geom_sina(alpha = 0.3, size = .5, maxwidth = 0.5) +
   geom_quasirandom(shape = 19,  size = 0.1, alpha = 1.0, width = 0.2, stroke = 0.5) +
-  facet_wrap(~ panel_label, scales = "free", ncol = 4) +
+  facet_wrap(~ panel_label, scales = "free", ncol = 5) +
   scale_fill_identity() +   
   scale_color_identity() + 
   labs(
@@ -507,6 +509,25 @@ ggplot(long_all, aes(x = pair_id, y = DDG, fill = natural_border, color = varian
     panel.grid.major.x = element_blank(),
     strip.text = element_markdown(face = "bold", size = 8.5)
   )
+
+ggsave(
+  filename = "DDG_shifts.png",
+  plot = p,
+  width = 210,
+  height = 297,
+  units = "mm",
+  dpi = 300
+)
+
+ggsave(
+  filename = "DDG_shifts.pdf",
+  plot = p,
+  width = 210,
+  height = 297,
+  units = "mm",
+  device = cairo_pdf # Ensures clean font/HTML rendering with ggtext
+)
+
 
 
 
