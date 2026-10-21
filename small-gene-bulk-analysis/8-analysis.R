@@ -457,16 +457,17 @@ long_all[, natural_border := {
 }, by = gene]
 
 # 4. Build single-line HTML-colored panel labels (showing first 3 + count of remaining if >3 variants)
+cutoff = 2
 gene_labels <- long_all[, {
   vars <- sort(unique(variantID))
   pal_vars <- get_palette_colors(length(vars), variant_pal)
   
-  if (length(vars) > 3) {
-    colored_vars <- sapply(1:3, function(i) {
+  if (length(vars) > cutoff) {
+    colored_vars <- sapply(1:cutoff, function(i) {
       paste0('<span style="color:', pal_vars[i], '; font-weight:bold;">', vars[i], '</span>')
     })
-    n_more <- length(vars) - 3
-    var_html <- paste0(paste(colored_vars, collapse = ", "), ", ", n_more, " more")
+    n_more <- length(vars) - cutoff
+    var_html <- paste0(paste(colored_vars, collapse = ", "), ", +", n_more, "")
   } else {
     colored_vars <- sapply(seq_along(vars), function(i) {
       paste0('<span style="color:', pal_vars[i], '; font-weight:bold;">', vars[i], '</span>')
@@ -474,7 +475,18 @@ gene_labels <- long_all[, {
     var_html <- paste(colored_vars, collapse = ", ")
   }
   
-  .(panel_label = paste0("<b>", unique(gene), "</b> (", var_html, ")"))
+  base_label <- paste0("<b>", unique(gene), "</b> (", var_html, ")")
+  
+  # Manual override exception for LOC gene only
+  curr_gene <- unique(gene)
+  if (curr_gene == "LOC128092249") {
+    panel_label <- paste0('<span style="font-size: 8pt;">', base_label, '</span>')
+  } else {
+    panel_label <- base_label
+  }
+  
+  # Return the properly assigned panel_label variable here!
+  .(panel_label = panel_label)
 }, by = gene]
 
 long_all <- merge(long_all, gene_labels, by = "gene", all.x = TRUE)
@@ -490,31 +502,34 @@ p <- ggplot(long_all, aes(x = pair_id, y = DDG, fill = natural_border, color = v
   #geom_boxplot(width = 0.2, outlier.shape = NA, alpha = 0.7,position = position_dodge(0.7)) +
   #geom_jitter(size = 0.9, alpha = 0.5, position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.8)) +
   #geom_sina(alpha = 0.3, size = .5, maxwidth = 0.5) +
-  geom_quasirandom(shape = 19,  size = 0.1, alpha = 1.0, width = 0.2, stroke = 0.5) +
+  geom_quasirandom(shape = 19,  size = 0.05, alpha = 1.0, width = 0.2, stroke = 0.5) +
   facet_wrap(~ panel_label, scales = "free", ncol = 5) +
   scale_fill_identity() +   
   scale_color_identity() + 
   labs(
-    title = "Monomer Stability Shift (ΔΔG) Across Ancestral Backgrounds by Gene",
+    title = "Variant-induced protein stability shift (ΔΔG) across ancestral backgrounds per gene",
     subtitle = "Panel titles display gene name and color-coded variant IDs (with 'X more' truncation if >3)",
     x = "Unique Natural-Pathogenic Pairs (Sorted by Variant & Mean ΔΔG)",
-    y = "ΔΔG (Pathogenic - Natural REU)"
+    y = "ΔΔG (pathogenic - natural REU)"
   ) +
   theme_minimal() +
   theme(
-    plot.title = element_text(face = "bold", size = 14),
-    axis.text.x = element_blank(),   
+    plot.title = element_text(face = "bold", size = 19.5),
+    plot.subtitle = element_text(size = 14),
+    axis.text.x = element_blank(),
     axis.ticks.x = element_blank(),
+    axis.title.x = element_text(size = 14, face = "bold"), #, margin = margin(t = 10)
+    axis.title.y = element_text(size = 14, face = "bold"), #, margin = margin(r = 10)
     legend.position = "none",
     panel.grid.major.x = element_blank(),
-    strip.text = element_markdown(face = "bold", size = 8.5)
+    strip.text = element_markdown(face = "bold", size = 9) # just about fits!
   )
 
 ggsave(
   filename = "DDG_shifts.png",
   plot = p,
-  width = 210,
-  height = 297,
+  width = 297,
+  height = 420,
   units = "mm",
   dpi = 300
 )
@@ -522,8 +537,8 @@ ggsave(
 ggsave(
   filename = "DDG_shifts.pdf",
   plot = p,
-  width = 210,
-  height = 297,
+  width = 297,
+  height = 420,
   units = "mm",
   device = cairo_pdf # Ensures clean font/HTML rendering with ggtext
 )
