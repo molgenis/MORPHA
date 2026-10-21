@@ -398,6 +398,10 @@ haplo_link_expanded_merged <- merge(haplo_link_expanded_merged, path_reu, by.x =
 ############################
 # Visualization of results #
 ############################
+
+natuhap_pal <- "Dark3" # Zissou, Fall, Earth, Temps, Geyser, Terrain, Plasma, Berlin, Dynamic, Spectral, Viridis, Heat, ..
+variant_pal <- "Zissou1" # Mako + Earth? Rocket?
+
 haplo_link_expanded_merged_signf <- subset(haplo_link_expanded_merged, significant_bonf_1pct=="YES")
 haplo_link_expanded_merged_signf_effsz <- subset(haplo_link_expanded_merged_signf, effectsize > 0.5)
 
@@ -421,20 +425,20 @@ long_all <- long_all[!is.na(DDG) & !is.na(variantID)]
 # 3. Dynamically assign color fills and borders per gene
 long_all[, variant_fill := {
   vars <- unique(variantID)
-  pal_vars <- hcl.colors(max(length(vars), 1), palette = "Zissou1")
+  pal_vars <- hcl.colors(max(length(vars), 1), palette = variant_pal)
   pal_vars[match(variantID, vars)]
 }, by = gene]
 
 long_all[, natural_border := {
   nats <- unique(natural_haplo)
-  pal_nats <- hcl.colors(max(length(nats), 1), palette = "Dark 3")
+  pal_nats <- hcl.colors(max(length(nats), 1), palette = natuhap_pal)
   pal_nats[match(natural_haplo, nats)]
 }, by = gene]
 
 # 4. Build single-line HTML-colored panel labels (showing first 3 + count of remaining if >3 variants)
 gene_labels <- long_all[, {
   vars <- sort(unique(variantID))
-  pal_vars <- hcl.colors(max(length(vars), 1), palette = "Zissou1")
+  pal_vars <- hcl.colors(max(length(vars), 1), palette = variant_pal)
   
   if (length(vars) > 3) {
     colored_vars <- sapply(1:3, function(i) {
@@ -460,20 +464,12 @@ setorder(pair_summary, panel_label, variantID, mean_DDG)
 long_all[, pair_id := factor(pair_id, levels = pair_summary$pair_id)]
 
 # 6. Render Multi-Panel Plot with Updated Headers
-ggplot(long_all, aes(x = pair_id, y = DDG, fill = variant_fill, color = natural_border)) +
-  geom_violin(
-    scale = "width", 
-    alpha = 0.7, 
-    trim = FALSE, 
-    linewidth = 0.4
-  ) +
-  geom_boxplot(
-    width = 0.1, 
-    color = "black", 
-    outlier.shape = NA, 
-    alpha = 0.7, 
-    position = position_dodge(0.7)
-  ) +
+ggplot(long_all, aes(x = pair_id, y = DDG, fill = natural_border, color = variant_fill)) +
+  geom_violin(scale = "width", alpha = 0.7, trim = FALSE, linewidth = 0.4) +
+  #geom_boxplot(width = 0.1, color = "black", outlier.shape = NA, alpha = 0.7,position = position_dodge(0.7)) +
+  #geom_jitter(size = 0.9, alpha = 0.5, position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.8)) +
+  geom_sina(alpha = 0.6, size = .5, maxwidth = 0.5) +
+  #geom_quasirandom(shape = 21,  size = 1, alpha = 0.5, width = 0.3, stroke = 0.4) +
   facet_wrap(~ panel_label, scales = "free", ncol = 4) +
   scale_fill_identity() +   
   scale_color_identity() + 
