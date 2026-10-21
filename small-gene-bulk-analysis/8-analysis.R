@@ -2,6 +2,7 @@ library(R.utils)
 library(data.table)
 library(this.path)
 library(ggplot2)
+library(ggtext)
 
 script_dir <- this.dir()
 parent_dir <- dirname(script_dir)
@@ -390,13 +391,115 @@ path_reu <- energy_min_per_haplo[, .(gene, haplotype, REU_pathogenic = REU)]
 haplo_link_expanded_merged <- merge(haplo_link_expanded_merged, nat_reu, by.x = c("gene", "natural_haplo"), by.y = c("gene", "haplotype"), all.x = TRUE)
 haplo_link_expanded_merged <- merge(haplo_link_expanded_merged, path_reu, by.x = c("gene", "pathogenic_haplo"),  by.y = c("gene", "haplotype"), all.x = TRUE)
 # remove DDG for ease of plotting
-ddg_cols <- paste0("DDG",1:100)
-haplo_link_expanded_merged[, (ddg_cols) := NULL]
+#ddg_cols <- paste0("DDG",1:100)
+#haplo_link_expanded_merged[, (ddg_cols) := NULL]
 
 
 ############################
 # Visualization of results #
 ############################
+haplo_link_expanded_merged_signf <- subset(haplo_link_expanded_merged, significant_bonf_1pct=="YES")
+haplo_link_expanded_merged_signf_effsz <- subset(haplo_link_expanded_merged_signf, effectsize > 0.5)
+
+# 1. Prepare data and strip table keys
+dt_all <- copy(haplo_link_expanded_merged_signf_effsz)
+setkey(dt_all, NULL)
+dt_all[, pair_id := .I]
+
+ddg_cols <- paste0("DDG", 1:100)
+
+# 2. Melt DDG columns into long format
+long_all <- melt(
+  dt_all,
+  id.vars = c("gene", "variantID", "natural_haplo", "pathogenic_haplo", "pair_id"),
+  measure.vars = ddg_cols,
+  variable.name = "trajectory",
+  value.name = "DDG"
+)
+long_all <- long_all[!is.na(DDG) & !is.na(variantID)]
+
+# 3. Dynamically assign color fills and borders per gene
+long_all[, variant_fill := {
+  vars <- unique(variantID)
+  pal_vars <- hcl.colors(max(length(vars), 1), palette = "Zissou1")
+  pal_vars[match(variantID, vars)]
+}, by = gene]
+
+long_all[, natural_border := {
+  nats <- unique(natural_haplo)
+  pal_nats <- hcl.colors(max(length(nats), 1), palette = "Dark 3")
+  pal_nats[match(natural_haplo, nats)]
+}, by = gene]
+
+# 4. Build single-line HTML-colored panel labels (showing first 3 + count of remaining if >3 variants)
+gene_labels <- long_all[, {
+  vars <- sort(unique(variantID))
+  pal_vars <- hcl.colors(max(length(vars), 1), palette = "Zissou1")
+  
+  if (length(vars) > 3) {
+    colored_vars <- sapply(1:3, function(i) {
+      paste0('<span style="color:', pal_vars[i], '; font-weight:bold;">', vars[i], '</span>')
+    })
+    n_more <- length(vars) - 3
+    var_html <- paste0(paste(colored_vars, collapse = ", "), ", ", n_more, " more")
+  } else {
+    colored_vars <- sapply(seq_along(vars), function(i) {
+      paste0('<span style="color:', pal_vars[i], '; font-weight:bold;">', vars[i], '</span>')
+    })
+    var_html <- paste(colored_vars, collapse = ", ")
+  }
+  
+  .(panel_label = paste0("<b>", unique(gene), "</b> (", var_html, ")"))
+}, by = gene]
+
+long_all <- merge(long_all, gene_labels, by = "gene", all.x = TRUE)
+
+# 5. Enforce sorting order within each panel/variant group
+pair_summary <- long_all[, .(mean_DDG = mean(DDG, na.rm = TRUE)), by = .(panel_label, variantID, pair_id)]
+setorder(pair_summary, panel_label, variantID, mean_DDG)
+long_all[, pair_id := factor(pair_id, levels = pair_summary$pair_id)]
+
+# 6. Render Multi-Panel Plot with Updated Headers
+ggplot(long_all, aes(x = pair_id, y = DDG, fill = variant_fill, color = natural_border)) +
+  geom_violin(
+    scale = "width", 
+    alpha = 0.7, 
+    trim = FALSE, 
+    linewidth = 0.4
+  ) +
+  geom_boxplot(
+    width = 0.1, 
+    color = "black", 
+    outlier.shape = NA, 
+    alpha = 0.7, 
+    position = position_dodge(0.7)
+  ) +
+  facet_wrap(~ panel_label, scales = "free", ncol = 4) +
+  scale_fill_identity() +   
+  scale_color_identity() + 
+  labs(
+    title = "Monomer Stability Shift (ΔΔG) Across Ancestral Backgrounds by Gene",
+    subtitle = "Panel titles display gene name and color-coded variant IDs (with 'X more' truncation if >3)",
+    x = "Unique Natural-Pathogenic Pairs (Sorted by Variant & Mean ΔΔG)",
+    y = "ΔΔG (Pathogenic - Natural REU)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.text.x = element_blank(),   
+    axis.ticks.x = element_blank(),
+    legend.position = "none",
+    panel.grid.major.x = element_blank(),
+    strip.text = element_markdown(face = "bold", size = 8.5)
+  )
+
+
+
+######
+### OLDER PLOTS FOR REFERENCE
+######
+  
+
 ### simple plot
 ggplot(haplo_link_expanded_merged, aes(x = REU_natural, y = REU_pathogenic, color = significant_bonf_1pct)) +
   geom_point(alpha = 0.7, size = 2) +
@@ -435,10 +538,10 @@ ggplot(haplo_link_expanded_merged, aes(x = REU_natural, y = REU_pathogenic, colo
   )
 
 ## MINI PANELS!
-library(ggplot2)
-n_genes <- uniqueN(haplo_link_expanded_merged$gene)
-gene_colors <- hcl.colors(n_genes, palette = "Dynamic") # "Dynamic" spreads hues well
-ggplot(haplo_link_expanded_merged, aes(x = REU_natural, y = REU_pathogenic, color = gene)) +
+signf <- subset(haplo_link_expanded_merged, significant_bonf_1pct=="YES")
+n_genes <- uniqueN(signf$variantID)
+gene_colors <- hcl.colors(n_genes, palette = "Zissou")
+ggplot(signf, aes(x = REU_natural, y = REU_pathogenic, color = variantID)) +
   geom_point(alpha = 0.8, size = 1.5) +
   geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
   facet_wrap(~ gene, scales = "free") +  # Creates a separate panel for each of the 56 genes
@@ -456,15 +559,12 @@ ggplot(haplo_link_expanded_merged, aes(x = REU_natural, y = REU_pathogenic, colo
   )
 
 # MINI PANELS FOR HAPLO PAIRS
-library(ggplot2)
-ggplot(long_dt, aes(x = haplo_pair, y = DDG, fill = as.factor(variantID))) +
-  geom_boxplot(alpha = 0.8, outlier.shape = NA, position = position_dodge(0.8)) +
-  geom_jitter(
-    aes(color = as.factor(variantID)), 
-    size = 0.7, 
-    alpha = 0.3, 
-    position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.8)
-  ) +
+long_signf <- merge( long_dt, variant_results, by = c("gene", "variantID"), all.x = TRUE)
+long_signf_sub <- subset(long_signf, significant_bonf_1pct=="YES")
+long_signf_effsz_sub <- subset(long_signf_sub, effectsize > 0.6)
+ggplot(long_signf_effsz_sub, aes(x = haplo_pair, y = DDG, fill = as.factor(variantID))) +
+  geom_violin(alpha = 0.5, position = position_dodge(0.8)) +
+  geom_jitter(aes(color = as.factor(variantID)), size = 0.9, alpha = 0.5, position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.8)) +
   facet_wrap(~ gene, scales = "free") +
   labs(
     title = "Trajectory Stability Distribution (DDG) by Haplotype Pair & Variant",
