@@ -507,14 +507,14 @@ p <- ggplot(long_all, aes(x = pair_id, y = DDG, fill = natural_border, color = v
   scale_fill_identity() +   
   scale_color_identity() + 
   labs(
-    title = "Protein stability shift (ΔΔG) induced by pathogenic variants in ancestral haplotypes",
-    subtitle = "Protein haplotypes reconstructed from 1kGP. Panel titles display gene name and color-coded ClinVar variant IDs",
+    title = "Protein stability shift induced by pathogenic variants in ancestral haplotypes",
+    subtitle = "Panel titles display gene and color-coded ClinVar variant IDs, shown are variants with < 1% Bonferroni-corrected significance",
     x = "Natural-pathogenic haplotype pairs where each natural ancestral haplotype its own greyscale colour",
     y = "ΔΔG, i.e. protein stability shift determined by pathogenic minus natural haplotype REU (Rosetta Energy Unit) from 100 independent replicates each"
   ) +
   theme_minimal() +
   theme(
-    plot.title = element_text(face = "bold", size = 19.5),
+    plot.title = element_text(face = "bold", size = 21),
     plot.subtitle = element_text(size = 14),
     axis.text.x = element_blank(),
     axis.ticks.x = element_blank(),
