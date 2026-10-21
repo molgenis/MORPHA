@@ -507,10 +507,10 @@ p <- ggplot(long_all, aes(x = pair_id, y = DDG, fill = natural_border, color = v
   scale_fill_identity() +   
   scale_color_identity() + 
   labs(
-    title = "Variant-induced protein stability shift (ΔΔG) across ancestral backgrounds per gene",
-    subtitle = "Panel titles display gene name and color-coded variant IDs (with 'X more' truncation if >3)",
-    x = "Unique Natural-Pathogenic Pairs (Sorted by Variant & Mean ΔΔG)",
-    y = "ΔΔG (pathogenic - natural REU)"
+    title = "Protein stability shift (ΔΔG) induced by pathogenic variants in ancestral haplotypes",
+    subtitle = "Protein haplotypes reconstructed from 1kGP. Panel titles display gene name and color-coded ClinVar variant IDs",
+    x = "Natural-pathogenic haplotype pairs where each natural ancestral haplotype its own greyscale colour",
+    y = "ΔΔG, i.e. protein stability shift determined by pathogenic minus natural haplotype REU (Rosetta Energy Unit) from 100 independent replicates each"
   ) +
   theme_minimal() +
   theme(
@@ -518,8 +518,8 @@ p <- ggplot(long_all, aes(x = pair_id, y = DDG, fill = natural_border, color = v
     plot.subtitle = element_text(size = 14),
     axis.text.x = element_blank(),
     axis.ticks.x = element_blank(),
-    axis.title.x = element_text(size = 14, face = "bold"), #, margin = margin(t = 10)
-    axis.title.y = element_text(size = 14, face = "bold"), #, margin = margin(r = 10)
+    axis.title.x = element_text(size = 14), # , face = "bold", margin = margin(t = 10)
+    axis.title.y = element_text(size = 14),
     legend.position = "none",
     panel.grid.major.x = element_blank(),
     strip.text = element_markdown(face = "bold", size = 9) # just about fits!
