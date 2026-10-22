@@ -4,6 +4,7 @@ library(this.path)
 library(ggplot2)
 library(ggtext)
 library(ggbeeswarm)
+library(scales)
 
 script_dir <- this.dir()
 parent_dir <- dirname(script_dir)
@@ -550,206 +551,120 @@ ggsave(
   device = cairo_pdf # Ensures clean font/HTML rendering with ggtext
 )
 
+####################
+####### plot superpopulation origins
+####################
 
-
-
-######
-### OLDER PLOTS FOR REFERENCE
-######
-  
-
-### simple plot
-ggplot(haplo_link_expanded_merged, aes(x = REU_natural, y = REU_pathogenic, color = significant_bonf_1pct)) +
-  geom_point(alpha = 0.7, size = 2) +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
-  scale_color_manual(values = c("YES" = "red", "NO" = "grey60")) +
-  labs(
-    title = "Natural vs. Pathogenic Haplotype Energy (REU)",
-    subtitle = "Colored by 1% Bonferroni-corrected significance",
-    x = "Natural Haplotype REU",
-    y = "Pathogenic Haplotype REU",
-    color = "Significant (1% Bonf)"
-  ) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(face = "bold", size = 12),
-    legend.position = "right"
-  )
-
-# color genes
-n_genes <- uniqueN(haplo_link_expanded_merged$gene)
-gene_colors <- hcl.colors(n_genes, palette = "Zissou") # Zissou, Fall, Earth, Temps, Geyser, Terrain, Plasma, Berlin, Dynamic, Spectral, Viridis, Heat, ..
-ggplot(haplo_link_expanded_merged, aes(x = REU_natural, y = REU_pathogenic, color = gene)) +
-  geom_point(alpha = 0.8, size = 2.5) +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
-  scale_color_manual(values = gene_colors) +
-  labs(
-    title = "Natural vs. pathogenic haplotype energy by gene (one or more variants each)",
-    x = "Natural haplotype REU",
-    y = "Pathogenic haplotype REU",
-    color = "Gene"
-  ) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(face = "bold", size = 12),
-    legend.position = "right"
-  )
-
-## MINI PANELS!
-signf <- subset(haplo_link_expanded_merged, significant_bonf_1pct=="YES")
-n_genes <- uniqueN(signf$variantID)
-gene_colors <- hcl.colors(n_genes, palette = "Zissou")
-ggplot(signf, aes(x = REU_natural, y = REU_pathogenic, color = variantID)) +
-  geom_point(alpha = 0.8, size = 1.5) +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "grey50") +
-  facet_wrap(~ gene, scales = "free") +  # Creates a separate panel for each of the 56 genes
-  scale_color_manual(values = gene_colors) +
-  labs(
-    title = "Natural vs. Pathogenic Haplotype Energy (REU) by Gene",
-    x = "Natural Haplotype REU",
-    y = "Pathogenic Haplotype REU"
-  ) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(face = "bold", size = 12),
-    legend.position = "none", # Hide legend since panels are labeled by gene name!
-    strip.text = element_text(face = "bold", size = 9)
-  )
-
-# MINI PANELS FOR HAPLO PAIRS
-long_signf <- merge( long_dt, variant_results, by = c("gene", "variantID"), all.x = TRUE)
-long_signf_sub <- subset(long_signf, significant_bonf_1pct=="YES")
-long_signf_effsz_sub <- subset(long_signf_sub, effectsize > 0.6)
-ggplot(long_signf_effsz_sub, aes(x = haplo_pair, y = DDG, fill = as.factor(variantID))) +
-  geom_violin(alpha = 0.5, position = position_dodge(0.8)) +
-  geom_jitter(aes(color = as.factor(variantID)), size = 0.9, alpha = 0.5, position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.8)) +
-  facet_wrap(~ gene, scales = "free") +
-  labs(
-    title = "Trajectory Stability Distribution (DDG) by Haplotype Pair & Variant",
-    subtitle = "Faceted by gene; colored by Variant ID",
-    x = "Haplotype Pairs (Natural vs Pathogenic)",
-    y = "DDG (Pathogenic - Natural REU)"
-  ) +
-  theme_minimal() +
-  theme(
-    plot.title = element_text(face = "bold", size = 12),
-    axis.text.x = element_blank(),  # Hides crowded haplotype pair text labels
-    axis.ticks.x = element_blank(),
-    legend.position = "none",       # Disables the legend completely
-    strip.text = element_text(face = "bold", size = 8)
-  )
-
-
-
-# with labels instead of legend
-library(data.table)
-library(ggplot2)
-library(ggrepel)
-genes <- sort(unique(haplo_link_expanded_merged$gene))
-gene_colors <- setNames(
-  hcl.colors(length(genes), palette = "Zissou"),
-  genes
+# Define palettes
+natuhap_pal <- c("white", "#505050")
+superpop_pal <- c(
+  "EUR" = "#1f78b4",
+  "AFR" = "#e31a1c",
+  "EAS" = "#33a02c",
+  "SAS" = "#ff7f00",
+  "AMR" = "#6a3d9a"
 )
-gene_labels <- haplo_link_expanded_merged[
-  ,
-  .(
-    REU_natural = median(REU_natural, na.rm = TRUE),
-    REU_pathogenic = median(REU_pathogenic, na.rm = TRUE)
-  ),
-  by = gene
-]
 
-ggplot(
-  haplo_link_expanded_merged,
-  aes(x = REU_natural, y = REU_pathogenic, color = gene)
-) +
-  geom_point(alpha = 0.45, size = 2) +
+haplo_link_expanded_merged_filter <- subset(haplo_link_expanded_merged, significant_bonf_1pct == "YES")
+
+# 1. Aggregate by gene and natural_haplotype, and compute total samples
+dt_all <- haplo_link_expanded_merged_filter[, .(
+  n_EUR = sum(n_EUR, na.rm = TRUE),
+  n_AFR = sum(n_AFR, na.rm = TRUE),
+  n_EAS = sum(n_EAS, na.rm = TRUE),
+  n_SAS = sum(n_SAS, na.rm = TRUE),
+  n_AMR = sum(n_AMR, na.rm = TRUE)
+), by = .(gene, natural_haplo = natural_haplo)]
+
+dt_all <- unique(
+  subset(haplo_link_expanded_merged, significant_bonf_1pct == "YES"), 
+  by = c("gene", "natural_haplo")
+)
+
+setkey(dt_all, NULL)
+dt_all[, pair_id := .I]
+
+# 2. Melt Superpopulation columns into long format
+superpop_cols <- c("n_EUR", "n_AFR", "n_EAS", "n_SAS", "n_AMR")
+long_all <- melt(
+  dt_all,
+  id.vars = c("gene", "natural_haplo", "pair_id", "n_samples"),
+  measure.vars = superpop_cols,
+  variable.name = "superpop_raw",
+  value.name = "count"
+)
+long_all[, superpop := sub("^n_", "", superpop_raw)]
+long_all[, superpop_raw := NULL]
+long_all <- long_all[count > 0]
+
+# 3. Assign natural haplotype border colors per gene using natuhap_pal
+long_all[, natural_border := {
+  nats <- unique(natural_haplo)
+  pal_nats <- get_palette_colors(length(nats), natuhap_pal)
+  pal_nats[match(natural_haplo, nats)]
+}, by = gene]
+
+# 4. Build simplified panel labels (gene name only, with LOC override)
+gene_labels <- long_all[, {
+  base_label <- paste0("<b>", unique(gene), "</b>")
   
-  geom_abline(
-    intercept = 0,
-    slope = 1,
-    linetype = "dashed",
-    color = "grey60"
+  curr_gene <- unique(gene)
+  if (curr_gene == "LOC128092249") {
+    panel_label <- paste0('<span style="font-size: 8pt;">', base_label, '</span>')
+  } else {
+    panel_label <- base_label
+  }
+  
+  .(panel_label = panel_label)
+}, by = gene]
+
+long_all <- merge(long_all, gene_labels, by = "gene", all.x = TRUE)
+
+# 5. Enforce sorting order within each panel by total sample count
+pair_summary <- long_all[, .(n_samples = max(n_samples)), by = .(panel_label, natural_haplo, pair_id)]
+setorder(pair_summary, panel_label, natural_haplo, -n_samples)
+long_all[, pair_id := factor(pair_id, levels = pair_summary$pair_id)]
+
+# Create a clean subset for text labeling (one row per bar)
+label_dt <- unique(long_all[, .(pair_id, panel_label, n_samples)])
+
+# 6. Render Multi-Panel Proportional Stacked Bar Chart with Sample Text Below
+p <- ggplot(long_all, aes(x = pair_id, y = count, fill = superpop)) +
+  geom_bar(stat = "identity", position = "fill", width = 0.8, linewidth = 0.5) +
+  geom_text(
+    data = label_dt, 
+    aes(x = pair_id, y = 0, label = n_samples), 
+    inherit.aes = FALSE, 
+    vjust = 1.5, 
+    size = 2.8
   ) +
-  
-  geom_label_repel(
-    data = gene_labels,
-    aes(
-      x = REU_natural,
-      y = REU_pathogenic,
-      label = gene,
-      color = gene
-    ),
-    inherit.aes = FALSE,
-    
-    # Label appearance
-    fill = "white",
-    alpha = 0.95,
-    fontface = "bold",
-    size = 3,
-    label.size = 0.35,
-    label.padding = unit(0.25, "lines"),
-    label.r = unit(0.15, "lines"),
-    
-    # Smart positioning
-    box.padding = 0.8,
-    point.padding = 0.6,
-    force = 3,
-    force_pull = 0.5,
-    max.overlaps = Inf,
-    max.iter = 100000,
-    max.time = 5,
-    
-    # Connector lines
-    min.segment.length = 0,
-    segment.color = "grey45",
-    segment.size = 0.4,
-    segment.alpha = 0.8,
-    
-    show.legend = FALSE
-  ) +
-  
-  scale_color_manual(values = gene_colors) +
+  facet_wrap(~ panel_label, scales = "free_x", ncol = 5) +
+  scale_fill_manual(values = superpop_pal) +
+  scale_color_identity() +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  coord_cartesian(clip = "off") + # Keeps text labels below the axis from getting clipped
   labs(
-    title = "Natural vs. Pathogenic Haplotype Energy (REU) by Gene",
-    x = "Natural Haplotype REU",
-    y = "Pathogenic Haplotype REU"
+    title = "Proportional superpopulation distribution across natural haplotypes",
+    subtitle = "Relative superpopulation breakdown per natural haplotype (total sample counts shown beneath bars)",
+    x = "Natural haplotypes",
+    y = "Proportion of samples",
+    fill = "Superpopulation"
   ) +
   theme_minimal() +
   theme(
-    plot.title = element_text(face = "bold", size = 12),
-    legend.position = "none",
-    panel.grid.minor = element_blank()
+    plot.title = element_text(face = "bold", size = 21),
+    plot.subtitle = element_text(size = 14),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    legend.position = "right",
+    panel.grid.major.x = element_blank(),
+    strip.text = element_markdown(face = "bold", size = 9),
+    plot.margin = margin(t = 10, r = 10, b = 35, l = 10) # Adds padding at the bottom for text labels
   )
 
-# visualization of the pvalues vs effect size (Volcano-style plot, highlighting Bonferroni hits)
-variant_results[, neg_log_p := -log10(pvalue)]
-ggplot(variant_results[is.finite(neg_log_p)], aes(x = effectsize, y = neg_log_p, color = significant_bonf_1pct)) +
-  geom_point(alpha = 0.7, size = 2) +
-  scale_color_manual(values = c("NO" = "steelblue", "YES" = "firebrick")) +
-  labs(
-    title = "Kruskal-Wallis Results with Bonferroni Correction",
-    subtitle = "Significance threshold: adjusted p < 0.01 (Red)",
-    x = "Effect Size (Epsilon-Squared)",
-    y = "-log10(P-value)",
-    color = "Significant (1% Bonf)"
-  ) +
-  theme_minimal()
+print(p)
 
-
-# Pick a specific variantID from your results to inspect
-target_variant <- variant_results[order(pvalue)][1, variantID] # selects the most significant one
-target_variant <- "7684"
-
-ggplot(long_dt[variantID == target_variant], aes(x = haplo_pair, y = DDG, fill = haplo_pair)) +
-  geom_boxplot(alpha = 0.7, outlier.shape = NA) +
-  geom_jitter(width = 0.2, size = 1, alpha = 0.4) +
-  labs(
-    title = paste("Trajectory Stability Distribution for Variant:", target_variant),
-    x = "Pathogenic Haplotype Pathway",
-    y = "DDG (Pathogenic - Natural)"
-  ) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "none")
 
 
