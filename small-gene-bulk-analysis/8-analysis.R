@@ -247,11 +247,18 @@ natural_check <- natural_long[, .(n_natural = uniqueN(natural_haplotype)), by = 
 if (nrow(natural_check) > 0) { stop("Some gene/sample combinations map to multiple natural haplotypes.") }
 # merge natural and pathogenic long tables on gene and sample
 merged_dt <- merge(pathogenic_long[, .(gene, sample, pathogenic_haplotype, variantID)],natural_long[, .(gene, sample, natural_haplotype)],by = c("gene", "sample"))
-# group into an 'expanded' list of all natural haplotypes, introduced variant, and resulting pathogenic haplotype
-haplo_link_expanded <- merged_dt[, .(n_samples = uniqueN(sample)), by = .(natural_haplo = natural_haplotype, pathogenic_haplo = pathogenic_haplotype, variantID)]
+### merge with superpop code from sample annotations
+samples <- read.delim("viz/igsr_samples.tsv", sep = "\t", check.names = FALSE)
+setnames(samples, names(samples), gsub(" ", "_", names(samples))) # fix col names
+merged_dt[, sample_base := sub("\\.h[12]$", "", sample)] # tmp col
+merged_dt[samples, on = .(sample_base == Sample_name), superpop := i.Superpopulation_code] # merge with superpop code
+merged_dt[sample == "HG01783.h1", superpop := "EUR"] # special best-effort handling for admixed individual
+merged_dt[sample == "HG01783.h2", superpop := "AFR"]
+merged_dt[, sample_base := NULL] # rm tmp col
+# group into an 'expanded' list of all natural haplotypes, introduced variant, and resulting pathogenic haplotype. count totals per natural haplo and per superpop.
+haplo_link_expanded <- merged_dt[, .(n_samples = uniqueN(sample), n_EUR = uniqueN(sample[superpop == "EUR"]), n_AFR = uniqueN(sample[superpop == "AFR"]), n_EAS = uniqueN(sample[superpop == "EAS"]), n_SAS = uniqueN(sample[superpop == "SAS"]), n_AMR = uniqueN(sample[superpop == "AMR"])), by = .(natural_haplo = natural_haplotype, pathogenic_haplo = pathogenic_haplotype, variantID)]
 haplo_link_expanded[, gene := sub("_.*", "", natural_haplo)]
 setcolorder(haplo_link_expanded, c("gene", "natural_haplo", "variantID", "pathogenic_haplo", "n_samples"))
-#subset(haplo_link_expanded, gene=="CSTB" & variantID=="1791620") # this one was problematic before
 dt <- sample_long <- natural_long <- pathogenic_long <- natural_check <- merged_dt <- NULL
 
 # sanity check: collapse n_samples per unique variantID and check for variants where total_shared_alleles is NOT equal to 6404
