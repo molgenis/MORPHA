@@ -573,10 +573,19 @@ superpop_pal <- c(
   "AMR" = "#f0e442"
 ) # colorblind safe
 
-haplo_link_expanded_merged_filter <- subset(haplo_link_expanded_merged, significant_bonf_1pct == "YES")
+# 1. Get the list of natural haplotypes that have at least one significant variant
+sig_nats <- unique(
+  subset(haplo_link_expanded_merged, significant_bonf_1pct == "YES"), 
+  by = c("gene", "natural_haplo")
+)[, .(gene, natural_haplo)]
 
-# 1. Deduplicate by gene and natural haplotype, and compute metadata
-dt_all <- unique(haplo_link_expanded_merged_filter, by = c("gene", "natural_haplo"))
+# 2. Extract true, deduplicated sample counts from the UNFILTERED master dataset
+dt_all <- unique(haplo_link_expanded_merged, by = c("gene", "natural_haplo"))
+
+# 3. Keep only the natural haplotypes that passed the significance filter
+dt_all <- dt_all[sig_nats, on = c("gene", "natural_haplo"), nomatch = 0]
+
+# 4. Compute totals and index IDs
 dt_all[, n_samples := n_EUR + n_AFR + n_EAS + n_SAS + n_AMR]
 dt_all[, nathapnr := as.integer(sub(".*_([0-9]+)$", "\\1", natural_haplo))]
 
