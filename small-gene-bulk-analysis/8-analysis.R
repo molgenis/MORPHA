@@ -566,12 +566,12 @@ ggsave(
 # Define palettes
 natuhap_pal <- c("white", "#505050")
 superpop_pal <- c(
-  "EUR" = "#1f78b4",
-  "AFR" = "#e31a1c",
-  "EAS" = "#33a02c",
-  "SAS" = "#ff7f00",
-  "AMR" = "#6a3d9a"
-)
+  "EUR" = "#0072b2",
+  "AFR" = "#d55e00",
+  "EAS" = "#009e73",
+  "SAS" = "#cc79a7",
+  "AMR" = "#f0e442"
+) # colorblind safe
 
 haplo_link_expanded_merged_filter <- subset(haplo_link_expanded_merged, significant_bonf_1pct == "YES")
 
@@ -620,7 +620,6 @@ gene_labels <- long_all[, {
 
 long_all <- merge(long_all, gene_labels, by = "gene", all.x = TRUE)
 
-## FIXXXX
 # 5. Enforce sorting order within each panel by total sample count
 pair_summary <- long_all[, .(
   n_samples = max(n_samples),
@@ -669,7 +668,15 @@ p <- ggplot(long_all, aes(x = pair_id, y = count, fill = superpop)) +
     axis.ticks.x = element_blank(),
     axis.title.x = element_text(size = 14),
     axis.title.y = element_text(size = 14),
-    legend.position = "right",
+    # --- LEGEND PLACEMENT IN BOTTOM-RIGHT EMPTY SPACE ---
+    legend.position = c(0.95, 0),               # Relative coordinates (0 to 1) targeting the bottom-right
+    legend.justification = c("right", "bottom"),   # Anchors the legend's bottom-right corner to those coordinates
+    legend.background = element_rect(              # Adds a clean white box so it stands out neatly
+      fill = "white", 
+      color = "white", 
+      linewidth = 0.3
+    ),
+    legend.margin = margin(6, 6, 6, 6),
     panel.grid.major.x = element_blank(),
     strip.text = element_markdown(face = "bold", size = 9),
     plot.margin = margin(t = 10, r = 10, b = 35, l = 10) # Adds padding at the bottom for text labels
