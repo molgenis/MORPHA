@@ -451,6 +451,9 @@ long_all <- melt(
 )
 long_all <- long_all[!is.na(DDG) & !is.na(variantID)]
 
+# Extract natural haplotype number from string
+long_all[, nathapnr := as.integer(sub(".*_([0-9]+)$", "\\1", natural_haplo))]
+
 # 3. Dynamically assign color fills and borders per gene
 long_all[, variant_fill := {
   vars <- unique(variantID)
@@ -500,9 +503,13 @@ gene_labels <- long_all[, {
 long_all <- merge(long_all, gene_labels, by = "gene", all.x = TRUE)
 
 # 5. Enforce sorting order within each panel/variant group
-pair_summary <- long_all[, .(mean_DDG = mean(DDG, na.rm = TRUE)), by = .(panel_label, variantID, pair_id)]
+pair_summary <- long_all[, .(mean_DDG = mean(DDG, na.rm = TRUE), nathapnr = unique(nathapnr)), by = .(panel_label, variantID, pair_id)]
+
 setorder(pair_summary, panel_label, variantID, mean_DDG)
 long_all[, pair_id := factor(pair_id, levels = pair_summary$pair_id)]
+
+# Create mapping vector: pair_id -> nathapnr
+axis_labels_map <- setNames(as.character(pair_summary$nathapnr), pair_summary$pair_id)
 
 # 6. Render Multi-Panel Plot with Updated Headers
 p <- ggplot(long_all, aes(x = pair_id, y = DDG, fill = natural_border, color = variant_fill)) +
@@ -514,17 +521,18 @@ p <- ggplot(long_all, aes(x = pair_id, y = DDG, fill = natural_border, color = v
   facet_wrap(~ panel_label, scales = "free", ncol = 5) +
   scale_fill_identity() +   
   scale_color_identity() + 
+  scale_x_discrete(labels = axis_labels_map, guide = guide_axis(check.overlap = TRUE)) +
   labs(
     title = "Protein stability shift induced by pathogenic variants in ancestral haplotypes",
     subtitle = "Panel titles display gene and color-coded ClinVar variant IDs, shown are variants with < 1% Bonferroni-corrected significance",
-    x = "Natural-pathogenic haplotype pairs where each natural ancestral haplotype its own greyscale colour",
+    x = "Natural-pathogenic haplotype pairs, natural ancestral haplotype are colored and numbered, overlapping numbers hidden",
     y = "ΔΔG, i.e. protein stability shift determined by pathogenic minus natural haplotype REU (Rosetta Energy Unit) from 100 independent replicates each"
   ) +
   theme_minimal() +
   theme(
     plot.title = element_text(face = "bold", size = 21),
     plot.subtitle = element_text(size = 14),
-    axis.text.x = element_blank(),
+    axis.text.x = element_text(size = 9),
     axis.ticks.x = element_blank(),
     axis.title.x = element_text(size = 14), # , face = "bold", margin = margin(t = 10)
     axis.title.y = element_text(size = 14),
@@ -567,19 +575,10 @@ superpop_pal <- c(
 
 haplo_link_expanded_merged_filter <- subset(haplo_link_expanded_merged, significant_bonf_1pct == "YES")
 
-# 1. Aggregate by gene and natural_haplotype, and compute total samples
-dt_all <- haplo_link_expanded_merged_filter[, .(
-  n_EUR = sum(n_EUR, na.rm = TRUE),
-  n_AFR = sum(n_AFR, na.rm = TRUE),
-  n_EAS = sum(n_EAS, na.rm = TRUE),
-  n_SAS = sum(n_SAS, na.rm = TRUE),
-  n_AMR = sum(n_AMR, na.rm = TRUE)
-), by = .(gene, natural_haplo = natural_haplo)]
-
-dt_all <- unique(
-  subset(haplo_link_expanded_merged, significant_bonf_1pct == "YES"), 
-  by = c("gene", "natural_haplo")
-)
+# 1. Deduplicate by gene and natural haplotype, and compute metadata
+dt_all <- unique(haplo_link_expanded_merged_filter, by = c("gene", "natural_haplo"))
+dt_all[, n_samples := n_EUR + n_AFR + n_EAS + n_SAS + n_AMR]
+dt_all[, nathapnr := as.integer(sub(".*_([0-9]+)$", "\\1", natural_haplo))]
 
 setkey(dt_all, NULL)
 dt_all[, pair_id := .I]
@@ -588,7 +587,7 @@ dt_all[, pair_id := .I]
 superpop_cols <- c("n_EUR", "n_AFR", "n_EAS", "n_SAS", "n_AMR")
 long_all <- melt(
   dt_all,
-  id.vars = c("gene", "natural_haplo", "pair_id", "n_samples"),
+  id.vars = c("gene", "natural_haplo", "nathapnr", "pair_id", "n_samples"), # Added "nathapnr" here
   measure.vars = superpop_cols,
   variable.name = "superpop_raw",
   value.name = "count"
@@ -608,9 +607,10 @@ long_all[, natural_border := {
 gene_labels <- long_all[, {
   base_label <- paste0("<b>", unique(gene), "</b>")
   
+  # keep exception to place the gene in the same panel
   curr_gene <- unique(gene)
   if (curr_gene == "LOC128092249") {
-    panel_label <- paste0('<span style="font-size: 8pt;">', base_label, '</span>')
+    panel_label <- paste0('<span>', base_label, '</span>')
   } else {
     panel_label <- base_label
   }
@@ -620,10 +620,18 @@ gene_labels <- long_all[, {
 
 long_all <- merge(long_all, gene_labels, by = "gene", all.x = TRUE)
 
+## FIXXXX
 # 5. Enforce sorting order within each panel by total sample count
-pair_summary <- long_all[, .(n_samples = max(n_samples)), by = .(panel_label, natural_haplo, pair_id)]
+pair_summary <- long_all[, .(
+  n_samples = max(n_samples),
+  nathapnr = unique(nathapnr)
+), by = .(panel_label, natural_haplo, pair_id)]
+
 setorder(pair_summary, panel_label, natural_haplo, -n_samples)
 long_all[, pair_id := factor(pair_id, levels = pair_summary$pair_id)]
+
+# Now pair_summary$nathapnr exists and matches pair_id length perfectly!
+axis_labels_map <- setNames(as.character(pair_summary$nathapnr), pair_summary$pair_id)
 
 # Create a clean subset for text labeling (one row per bar)
 label_dt <- unique(long_all[, .(pair_id, panel_label, n_samples)])
@@ -633,15 +641,17 @@ p <- ggplot(long_all, aes(x = pair_id, y = count, fill = superpop)) +
   geom_bar(stat = "identity", position = "fill", width = 0.8, linewidth = 0.5) +
   geom_text(
     data = label_dt, 
-    aes(x = pair_id, y = 0, label = n_samples), 
+    aes(x = pair_id, y = 0, label = paste0("", n_samples)), 
     inherit.aes = FALSE, 
-    vjust = 1.5, 
-    size = 2.8
+    vjust = 1.2, 
+    size = 9 / .pt, 
+    fontface = "italic"
   ) +
   facet_wrap(~ panel_label, scales = "free_x", ncol = 5) +
   scale_fill_manual(values = superpop_pal) +
   scale_color_identity() +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_x_discrete(labels = axis_labels_map, guide = guide_axis(check.overlap = TRUE)) +
   coord_cartesian(clip = "off") + # Keeps text labels below the axis from getting clipped
   labs(
     title = "Proportional superpopulation distribution across natural haplotypes",
@@ -654,7 +664,8 @@ p <- ggplot(long_all, aes(x = pair_id, y = count, fill = superpop)) +
   theme(
     plot.title = element_text(face = "bold", size = 21),
     plot.subtitle = element_text(size = 14),
-    axis.text.x = element_blank(),
+    axis.text.x = element_text(size = 9, margin = margin(t = 0)),
+    axis.ticks.length = unit(0, "pt"),
     axis.ticks.x = element_blank(),
     axis.title.x = element_text(size = 14),
     axis.title.y = element_text(size = 14),
@@ -664,7 +675,12 @@ p <- ggplot(long_all, aes(x = pair_id, y = count, fill = superpop)) +
     plot.margin = margin(t = 10, r = 10, b = 35, l = 10) # Adds padding at the bottom for text labels
   )
 
-print(p)
-
-
+ggsave(
+  filename = "superpop.png",
+  plot = p,
+  width = 297,
+  height = 420,
+  units = "mm",
+  dpi = 300
+)
 
