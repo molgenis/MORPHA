@@ -514,9 +514,6 @@ axis_labels_map <- setNames(as.character(pair_summary$nathapnr), pair_summary$pa
 # 6. Render Multi-Panel Plot with Updated Headers
 p <- ggplot(long_all, aes(x = pair_id, y = DDG, fill = natural_border, color = variant_fill)) +
   geom_violin(scale = "width", alpha = 1.0, trim = FALSE, linewidth = 0.4,color="black") +
-  #geom_boxplot(width = 0.2, outlier.shape = NA, alpha = 0.7,position = position_dodge(0.7)) +
-  #geom_jitter(size = 0.9, alpha = 0.5, position = position_jitterdodge(jitter.width = 0.1, dodge.width = 0.8)) +
-  #geom_sina(alpha = 0.3, size = .5, maxwidth = 0.5) +
   geom_quasirandom(shape = 19,  size = 0.05, alpha = 1.0, width = 0.2, stroke = 0.5) +
   facet_wrap(~ panel_label, scales = "free", ncol = 5) +
   scale_fill_identity() +   
@@ -525,39 +522,28 @@ p <- ggplot(long_all, aes(x = pair_id, y = DDG, fill = natural_border, color = v
   labs(
     title = "Protein stability shift induced by pathogenic variants in ancestral haplotypes",
     subtitle = "Panel titles display gene and color-coded ClinVar variant IDs, shown are variants with < 1% Bonferroni-corrected significance",
-    x = "Natural-pathogenic haplotype pairs, natural ancestral haplotype are colored and numbered, overlapping numbers hidden",
+    x = "Natural-pathogenic haplotype pairs with natural haplotype in greyscale and numbered (overlapping numbers are hidden)",
     y = "ΔΔG, i.e. protein stability shift determined by pathogenic minus natural haplotype REU (Rosetta Energy Unit) from 100 independent replicates each"
   ) +
   theme_minimal() +
   theme(
     plot.title = element_text(face = "bold", size = 21),
     plot.subtitle = element_text(size = 14),
-    axis.text.x = element_text(size = 9),
+    axis.text.x = element_text(size = 9, color="black"),
+    axis.text.y = element_text(size = 9, color="black"),
     axis.ticks.x = element_blank(),
     axis.title.x = element_text(size = 14), # , face = "bold", margin = margin(t = 10)
     axis.title.y = element_text(size = 14),
     legend.position = "none",
     panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(color = "black", linewidth = 0.3), # Makes major y-grid lines black
+    panel.grid.minor   = element_blank(),                                # Hides all minor grid lines completely
+    #panel.grid = element_blank(),
     strip.text = element_markdown(face = "bold", size = 9) # just about fits!
   )
 
-ggsave(
-  filename = "DDG_shifts.png",
-  plot = p,
-  width = 297,
-  height = 420,
-  units = "mm",
-  dpi = 300
-)
-
-ggsave(
-  filename = "DDG_shifts.pdf",
-  plot = p,
-  width = 297,
-  height = 420,
-  units = "mm",
-  device = cairo_pdf # Ensures clean font/HTML rendering with ggtext
-)
+ggsave(filename = "DDG_shifts.png", plot = p, width = 297, height = 420, units = "mm", dpi = 300)
+#ggsave(filename = "DDG_shifts.pdf", plot = p, width = 297, height = 420, units = "mm", device = cairo_pdf)
 
 ####################
 ####### plot superpopulation origins
@@ -656,7 +642,7 @@ p <- ggplot(long_all, aes(x = pair_id, y = count, fill = superpop)) +
     fontface = "italic"
   ) +
   facet_wrap(~ panel_label, scales = "free_x", ncol = 5) +
-  scale_fill_manual(values = superpop_pal) +
+  scale_fill_manual(values = superpop_pal, labels = c("EUR" = "European","AFR" = "African","EAS" = "East Asian","SAS" = "South Asian","AMR" = "Admixed American")) +
   scale_color_identity() +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_x_discrete(labels = axis_labels_map, guide = guide_axis(check.overlap = TRUE)) +
@@ -672,13 +658,13 @@ p <- ggplot(long_all, aes(x = pair_id, y = count, fill = superpop)) +
   theme(
     plot.title = element_text(face = "bold", size = 21),
     plot.subtitle = element_text(size = 14),
-    axis.text.x = element_text(size = 9, margin = margin(t = 0)),
+    axis.text.x = element_text(size = 9, margin = margin(t = 0), color="black"),
     axis.ticks.length = unit(0, "pt"),
     axis.ticks.x = element_blank(),
     axis.title.x = element_text(size = 14),
     axis.title.y = element_text(size = 14),
     # --- LEGEND PLACEMENT IN BOTTOM-RIGHT EMPTY SPACE ---
-    legend.position = c(0.95, 0),               # Relative coordinates (0 to 1) targeting the bottom-right
+    legend.position = c(0.99, -0.009),               # Relative coordinates (0 to 1) targeting the bottom-right
     legend.justification = c("right", "bottom"),   # Anchors the legend's bottom-right corner to those coordinates
     legend.background = element_rect(              # Adds a clean white box so it stands out neatly
       fill = "white", 
@@ -686,17 +672,14 @@ p <- ggplot(long_all, aes(x = pair_id, y = count, fill = superpop)) +
       linewidth = 0.3
     ),
     legend.margin = margin(6, 6, 6, 6),
-    panel.grid.major.x = element_blank(),
+
+    legend.text = element_text(size = 10),           # Increases text size of superpopulation labels (e.g., EUR, AFR)
+    legend.title = element_text(size = 14, face = "bold"), # Increases legend title size
+
+    panel.grid = element_blank(),
     strip.text = element_markdown(face = "bold", size = 9),
     plot.margin = margin(t = 10, r = 10, b = 35, l = 10) # Adds padding at the bottom for text labels
   )
 
-ggsave(
-  filename = "superpop.png",
-  plot = p,
-  width = 297,
-  height = 420,
-  units = "mm",
-  dpi = 300
-)
+ggsave(filename = "superpop.png", plot = p, width = 297, height = 420, units = "mm", dpi = 300)
 
