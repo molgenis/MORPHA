@@ -520,7 +520,7 @@ p <- ggplot(long_all, aes(x = pair_id, y = DDG, fill = natural_border, color = v
   scale_color_identity() + 
   scale_x_discrete(labels = axis_labels_map, guide = guide_axis(check.overlap = TRUE)) +
   labs(
-    title = "Protein stability shift induced by pathogenic variants in ancestral haplotypes",
+    title = "Protein stability shift induced by pathogenic variants in natural haplotypes",
     subtitle = "Panel titles display gene and color-coded ClinVar variant IDs, shown are variants with < 1% Bonferroni-corrected significance",
     x = "Natural-pathogenic haplotype pairs with natural haplotype in greyscale and numbered (overlapping numbers are hidden)",
     y = "ΔΔG, i.e. protein stability shift determined by pathogenic minus natural haplotype REU (Rosetta Energy Unit) from 100 independent replicates each"
@@ -648,10 +648,10 @@ p <- ggplot(long_all, aes(x = pair_id, y = count, fill = superpop)) +
   scale_x_discrete(labels = axis_labels_map, guide = guide_axis(check.overlap = TRUE)) +
   coord_cartesian(clip = "off") + # Keeps text labels below the axis from getting clipped
   labs(
-    title = "Proportional superpopulation distribution across natural haplotypes",
-    subtitle = "Relative superpopulation breakdown per natural haplotype (total sample counts shown beneath bars)",
-    x = "Natural haplotypes",
-    y = "Proportion of samples",
+    title = "Sample and population distribution of natural haplotypes within this analysis",
+    subtitle = "Gene panels and haplotype numbering match those in the stability shift plot, including the applied significance threshold",
+    x = "Natural protein haplotypes from 1kGP, with each unique haplotype numbered and total sample counts in italics",
+    y = "Relative 1kGP superpopulation breakdown per natural haplotype",
     fill = "Superpopulation"
   ) +
   theme_minimal() +
