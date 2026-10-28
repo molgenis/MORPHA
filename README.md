@@ -1,7 +1,18 @@
 # MORPHA
 MOlecular effect Range of germline Pathogenic variation in global protein HAplotypes
 
-Example run (in this order):
+To reproduce the small genes analysis, run these scripts:
+- `0-all-small-genes.sh`
+- `1-extract-small-gene-variants-from-clinvar.sh`
+- `2-signal-peptide-lengths.sh`
+- `3-reconstruct-1kg-patho-haplotypes.sh`
+- `4-fold.sh`
+- `5-repair.sh`
+- `6-relax.sh`
+- `7-lowest.sh`
+- `8-analysis.R`
+
+How to run separate components:
 1. `./genename2uniqproteinhaplo.sh <gene> <RefSeq protein ID> <front signal peptide cutoff, optional, default = 0>`
    - Using GRCh38 and 1000G data, reconstruct and group all 1KG haplotypes.
    - If front signal peptide cutoff is provided, the first N residues will be removed from each output protein sequence.
